@@ -1,0 +1,8 @@
+{
+  "name": "skald",
+  "version": "0.0.1",
+  "description": "skaldpack — lean, opinionated Claude Code skill pack for spec-driven, git-centered development",
+  "author": {
+    "name": "Danil Zabolotskii"
+  }
+}

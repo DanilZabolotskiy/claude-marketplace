@@ -1,0 +1,13 @@
+{
+  "name": "skaldpack",
+  "owner": {
+    "name": "Danil Zabolotskii"
+  },
+  "plugins": [
+    {
+      "name": "skald",
+      "description": "skaldpack — lean, opinionated skill pack for spec-driven, git-centered development",
+      "source": "./plugins/skald"
+    }
+  ]
+}
