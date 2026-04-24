@@ -24,8 +24,8 @@ If the ID is missing or does not match `^\d+\.\d+$`, stop and return a `failed` 
    - If `git pull` ends with a conflict or error, stop with `blocked`.
 2. Read `claude.md` / `CLAUDE.md` in the project root for stack, style, and build/test commands. If absent, note it and continue.
 3. Read `task.md` and locate the iteration section. Accept either form of heading:
-   - `### Iteration <task-id>` (English H3)
-   - `#### Итерация <task-id>` (Russian H4)
+   - `### Iteration <task-id>` (English)
+   - `### Итерация <task-id>` (Russian)
    The section body runs until the next iteration heading or EOF. If no such section exists, stop with `failed`.
 4. Create a fresh branch off `dev`: `feature/iteration-<task-id>`. If the branch already exists locally or on origin, stop with `blocked` and report it.
 
