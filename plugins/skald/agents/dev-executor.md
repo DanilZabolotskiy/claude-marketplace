@@ -42,6 +42,10 @@ If the ID is missing or does not match `^\d+\.\d+$`, stop and return a `failed` 
 2. Run the full test suite, not only the new tests.
 3. If red, fix until green. Never skip hooks (`--no-verify`) or bypass signing.
 
+## Done-marker
+
+If `iteration.md` exists at the project root, locate the line for this iteration — the checkbox line whose bold ID matches the current task (e.g. `**16.1**` for task `16.1`) — and flip its checkbox from `- [ ]` to `- [x]`. Leave the rest of the line, including the iteration title, untouched. Do NOT append a description, version, date, summary, or any implementation notes; the chat summary and PR body already carry that detail. If the file does not exist or no matching line is found, skip silently — do not create or restructure the file.
+
 ## PR creation
 
 Once build and tests are green:
