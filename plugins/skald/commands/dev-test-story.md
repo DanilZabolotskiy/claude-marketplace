@@ -1,10 +1,13 @@
 ---
-description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md — каждая история уходит в свежий story-test-orchestrator (чистый контекст), внутри он по одному дёргает dev-test-author на каждый эндпоинт с фикс-циклом до 3 попыток (фикс тестов или прод-кода через отдельный PR + ожидание деплоя). Истории, которые ещё не завершены в iteration.md, пропускаются.
+description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md. Для каждой истории сначала запускается story-test-orchestrator-подагент (чистый контекст) — он делает только discovery: ищет HTTP-маршруты, кросс-чекает OpenAPI/контроллеры/доки и возвращает по одному dev-test brief'у на эндпоинт. Затем сама команда (в главной сессии) на каждый эндпоинт гоняет fix-loop dev-test-author → pr-reviewer (auto-merge) → dev-test-fixer → автор-ретрай / deploy-wait, до 3 фикс-попыток. Истории, которые ещё не завершены в iteration.md, пропускаются.
 argument-hint: [<story-id>] [+]
 allowed-tools: Task, Read, Bash, Grep, Glob
 ---
 
-Generate dev-tests for one or more stories from `task.md`. Each story is dispatched to a fresh `story-test-orchestrator` subagent — so every story starts in clean context, as if `/skald:dev-test-story` had been launched from scratch for it. The orchestrator does its own discovery (routes, OpenAPI, controllers, docs) and runs a per-endpoint state machine `dev-test-author → pr-reviewer (auto-merge) → (dev-test-fixer → author / deploy-wait → author, ≤ 3 fix attempts)`.
+Generate dev-tests for one or more stories from `task.md`. Architecture splits work between a subagent (clean context per story) and the command itself (main session):
+
+- **`story-test-orchestrator` subagent** — discovery only: routes, OpenAPI, controllers, docs, brief assembly. Emits ROUTE-BRIEF / BLOCKED-ROUTE blocks + STORY-DISCOVERY-RESULT. Does NOT dispatch other agents.
+- **This command (main session)** — for each ROUTE-BRIEF the orchestrator returned, runs the per-route state machine inline, dispatching `dev-test-author`, `pr-reviewer`, `dev-test-fixer` via the Task tool. The state machine, the safety caps, and the per-story coverage table all live here. This is the reason the orchestrator-side `Task`-dispatch architecture was retired — sub-subagent dispatching is unreliable; the main session has Task working.
 
 Only **completed** stories (all iterations marked `- [x]` in `iteration.md`) are dispatched — testing in-progress code is wasted effort.
 
@@ -74,29 +77,323 @@ We only run dev-tests against stories whose code has already been merged on `dev
 
 6. Print the filtered dispatch list (eligible stories only) to the user as a numbered list before starting Step 2. Note separately how many were filtered out.
 
-## Step 2 — Per-story dispatch
+## Step 2 — Per-story pipeline
 
-Run orchestrators **sequentially**. No parallelism — `dev` is shared, `task.md` is shared, each orchestrator's authors merge PRs that the next orchestrator must see.
+Run stories **sequentially**. No parallelism — `dev` is shared, `task.md` is shared, each story's merges must be visible to the next story's discovery.
 
-For each target story `<id>` in the list:
+For each target story `<id>` in the filtered dispatch list, do Steps 2a → 2d in order. Between stories, before dispatching the next orchestrator, re-sync the main session's working tree:
 
-1. Launch the `story-test-orchestrator` subagent via the Task tool with this exact prompt (substitute `<id>`):
+```
+git checkout dev && git pull --ff-only
+```
+
+so the next orchestrator sees PRs merged by the previous story.
+
+### Step 2a — Discovery (subagent, clean context)
+
+Launch the `story-test-orchestrator` subagent via the Task tool with this exact prompt (substitute `<id>`):
 
 ```
 Story ID: <id>
 
-Generate dev-tests for story <id> from task.md per your instructions. Sync to dev, discover routes via task.md + OpenAPI + controllers + docs, dispatch one fresh dev-test-author per endpoint sequentially, then print the per-story report and end your message with the STORY-TEST-RESULT block.
+Run discovery for story <id> per your instructions: sync to dev, parse the iteration bodies in task.md, extract HTTP routes, cross-check contracts/openapi.yaml, locate controllers under modules/, gather doc context, build a self-contained dev-test brief per ok route. Emit one ===ROUTE-BRIEF #N=== block per coverable route, one ===BLOCKED-ROUTE #N=== block per non-coverable route, and end your message with the ===STORY-DISCOVERY-RESULT=== block. Do not dispatch any other subagents — the command does that.
 ```
 
-2. Parse the `===STORY-TEST-RESULT===` block. Capture: `status`, `ok_count`, `merged`, `open`, `failed`, `blocked`, `skipped`, `no_endpoints`, `notes`.
-3. Capture the orchestrator's per-story report (the part above STORY-TEST-RESULT) verbatim — it will be relayed in the final output for multi-story mode.
-4. **Failure handling:** regardless of `status` (`success` / `partial` / `failed` / `blocked`), **always move to the next story**. Never abort the batch because one story stumbled. The orchestrator stops its own loop on internal failure; this command only orchestrates between stories.
+Parse the orchestrator's reply:
 
-Safety cap: at most one dispatch per story in the target list. No retries.
+1. **`===STORY-DISCOVERY-RESULT===` block.** Capture `status`, `story_title`, `ok_count`, `blocked_count`, `no_endpoints`, `notes`.
+   - `status: blocked` → record the story as `🚫 discovery blocked` with the orchestrator's `notes`. Skip Steps 2b–2c entirely; go to the next story.
+   - `status: success` + `no_endpoints: true` → record the story as `⏭ нет эндпоинтов`. Skip Steps 2b–2c; go to the next story.
+   - `status: success` + `no_endpoints: false` → continue to Step 2b.
+
+2. **All `===ROUTE-BRIEF #N===` blocks.** For each block, capture: `method`, `path`, `route_slug`, `from_iteration`, `controller_file`, `controller_class`, and the verbatim Markdown between `---BRIEF-MARKDOWN---` and `---END-BRIEF-MARKDOWN---`. Preserve emission order — that is the source order the state machine will use.
+
+3. **All `===BLOCKED-ROUTE #N===` blocks.** For each, capture `method`, `path`, `reason`. These don't run the state machine; they go straight into the per-story discovery-blocked table in Step 2d.
+
+4. **Pre-flight summary.** The orchestrator already printed a Russian pre-flight ("К покрытию (…) / Заблокировано (…)"). Relay it verbatim to the user before starting Step 2b so they see what's about to be tested.
+
+### Step 2b — Per-route state machine
+
+For each ROUTE-BRIEF in source order, maintain a per-route record:
+
+- `attempts_used` (0..3) — number of `dev-test-fixer` dispatches so far for this route
+- `author_attempt` (1..3) — counter passed to `dev-test-author` as `Attempt: <n>/3`; starts at 1, increments after every fixer dispatch
+- `last_author_result` — verbatim `===RESULT===` block from the most recent `dev-test-author` run (used by fixer mode A)
+- `last_review_report` — verbatim Markdown report (the part above `===RESULT===`) from the most recent `pr-reviewer` run (used by fixer mode B)
+- `pr_number` — test PR number, set as soon as the author opens it
+- `prod_pr_number` — prod-fix PR number, set when fixer returns `fix_kind: prod`
+- `final_status` ∈ {`green`, `partial`, `failed`, `blocked`}
+- `notes` — one-line summary used in the per-story coverage table
+
+State machine — `state` starts at `AUTHOR`:
+
+```
+loop:
+  if state == AUTHOR:
+    result := dispatch dev-test-author (Attempt: <author_attempt>/3, brief)
+    record last_author_result, pr_number (if result.pr_number is non-null)
+
+    if result.status == success:
+       state := REVIEW
+    elif result.status == skipped:
+       final_status := green; notes := "tests already exist on dev"; break
+    elif result.status == blocked AND result.failure_kind == prod:
+       if attempts_used >= 3: final_status := failed; notes := "fix loop exhausted: " + result.notes; break
+       state := FIX_FROM_FAIL
+    elif result.status == failed AND result.failure_kind == dev:
+       if attempts_used >= 3: final_status := failed; notes := "fix loop exhausted: " + result.notes; break
+       state := FIX_FROM_FAIL
+    elif result.status == blocked AND result.failure_kind == null:
+       # dirty tree, branch missing, etc.
+       if result.notes contains "dirty working tree":
+          ABORT WHOLE STORY (see Story-level abort below)
+       final_status := blocked; notes := result.notes; break
+    else:
+       final_status := failed; notes := result.notes; break
+
+  elif state == REVIEW:
+    review := dispatch pr-reviewer (Auto-merge on approve: true, Review scope: dev-test, PR: <pr_number>)
+    record last_review_report (everything in the subagent's reply before the ===RESULT=== line, starting from the <!-- skald-pr-reviewer-report --> marker)
+
+    if review.status != success:
+       final_status := failed; notes := "reviewer failed: " + review.notes; break
+
+    if review.verdict in {approve, comment}:
+       if review.merged == true:
+          final_status := green; notes := ""; break
+       else:
+          final_status := partial; notes := "merge blocked: " + review.notes; break
+    elif review.verdict == request-changes:
+       if attempts_used >= 3: final_status := failed; notes := "3 review rounds without approval"; break
+       state := FIX_FROM_REVIEW
+
+  elif state == FIX_FROM_FAIL:
+    attempts_used += 1
+    fix := dispatch dev-test-fixer (Attempt: <attempts_used>/3, mode A: LAST FAILURE = last_author_result)
+    if fix.status != success:
+       final_status := failed; notes := "fixer (fail) blocked at attempt " + attempts_used + ": " + fix.notes; break
+    if fix.fix_kind == dev:
+       author_attempt += 1
+       state := AUTHOR
+    elif fix.fix_kind == prod:
+       prod_pr_number := fix.prod_pr_number
+       state := PROD_PR_REVIEW
+
+  elif state == FIX_FROM_REVIEW:
+    attempts_used += 1
+    fix := dispatch dev-test-fixer (Attempt: <attempts_used>/3, mode B: REVIEW REPORT = last_review_report)
+    if fix.status != success:
+       final_status := failed; notes := "fixer (review) blocked at attempt " + attempts_used + ": " + fix.notes; break
+    if fix.fix_kind == dev:
+       author_attempt += 1
+       state := AUTHOR
+    elif fix.fix_kind == prod:
+       prod_pr_number := fix.prod_pr_number
+       state := PROD_PR_REVIEW
+
+  elif state == PROD_PR_REVIEW:
+    review := dispatch pr-reviewer (Auto-merge on approve: true, Review scope: prod-fix, PR: <prod_pr_number>)
+    if review.status != success or review.verdict == request-changes:
+       final_status := blocked
+       notes := "prod-fix PR #" + prod_pr_number + " not approved (verdict: " + review.verdict + ")"
+       break
+    if review.verdict in {approve, comment} AND review.merged == true:
+       state := DEPLOY_WAIT
+    else:
+       # approved but merge blocked
+       final_status := blocked
+       notes := "prod-fix PR #" + prod_pr_number + " approved but auto-merge blocked: " + review.notes
+       break
+
+  elif state == DEPLOY_WAIT:
+    deploy_ok := wait for latest CI run on dev (see "Deploy wait" below)
+    if not deploy_ok:
+       final_status := failed
+       notes := "dev deploy failed/timed out after prod-fix #" + prod_pr_number
+       break
+    author_attempt += 1
+    state := AUTHOR
+```
+
+Record the per-route outcome and move to the next route.
+
+#### Deploy wait (after merging a prod-fix PR)
+
+After `gh pr merge` of a `fix/<slug>-prod` PR succeeds (the `pr-reviewer` did this with auto-merge), the dev contour must rebuild and redeploy before re-running the test. From the main session:
+
+```
+run_id=$(gh run list --branch dev --limit 1 --json databaseId -q '.[0].databaseId')
+gh run watch "$run_id" --exit-status
+```
+
+- Exit 0 → deploy succeeded, proceed to AUTHOR retry.
+- Non-zero exit → deploy failed → `final_status: failed` for this route.
+- If `gh run watch` does not return within 20 minutes (use the Bash tool's `timeout` parameter set to `1200000` ms) → kill it and treat as failure.
+- If `gh run list` returns no run (no CI workflow on `dev` push), proceed to AUTHOR retry immediately and add `notes: no CI workflow detected on dev — relying on out-of-band deploy`.
+
+#### Story-level abort
+
+If `dev-test-author` returns `blocked` with `notes` containing `dirty working tree`, stop the whole story loop. Mark the currently-processing route as `blocked` with `notes: dirty tree during dispatch`, and mark every remaining (not-yet-processed) ROUTE-BRIEF as `blocked` with `notes: skipped — dirty tree on earlier route`. Then jump to Step 2c for this story.
+
+#### Safety cap
+
+For each route, total subagent dispatches are bounded: 1 initial author + up to 3 fixer + up to 3 author retries + up to 4 reviewer (one per code state) + up to 1 prod-PR reviewer + up to 1 deploy-wait. The `attempts_used` counter caps fixer entries at 3; once exhausted, the route ends as `failed`.
+
+Routes within a story are processed **sequentially** — never parallelise.
+
+#### Dispatch templates
+
+All subagent prompts must be self-contained — each subagent starts in clean context. Use these exact templates (substitute placeholders verbatim):
+
+**`dev-test-author` (`subagent_type: dev-test-author`):**
+
+```
+Story ID: <story-id>
+Route: <METHOD> <path>
+Route slug: <route-slug>
+Attempt: <author_attempt>/3
+
+Implement (or, for Attempt > 1, verify) the dev-test class for the single endpoint described in the brief below. Branch `feature/devtest-<route-slug>`. Place tests under `app/src/devTest/kotlin/so/skald/app/devtest/<route-slug>/<Feature>DevApiTest.kt`. Run via `./script/dev-test.sh --tests "..."`. Open the PR into `dev` (do NOT merge — pr-reviewer will). End your message with the RESULT block.
+
+=== BRIEF ===
+<brief markdown captured verbatim between ---BRIEF-MARKDOWN--- fences in Step 2a>
+=== END BRIEF ===
+```
+
+**`dev-test-fixer` mode A — after author failure (`subagent_type: dev-test-fixer`):**
+
+```
+Story ID: <story-id>
+Route: <METHOD> <path>
+Route slug: <route-slug>
+Branch: feature/devtest-<route-slug>
+Attempt: <attempts_used>/3
+
+Apply the minimum fix needed for this endpoint's dev-test pipeline based on the last author failure below. If failure_kind is dev, fix the test under app/src/devTest/**. If prod, open a prod-fix PR on fix/<route-slug>-prod. Sanity-compile, push, end with the RESULT block.
+
+=== BRIEF ===
+<brief markdown>
+=== END BRIEF ===
+
+=== LAST FAILURE ===
+<verbatim ===RESULT=== block from the last dev-test-author run, including the ===END=== line>
+=== END ===
+```
+
+**`dev-test-fixer` mode B — after review request-changes (`subagent_type: dev-test-fixer`):**
+
+```
+Story ID: <story-id>
+Route: <METHOD> <path>
+Route slug: <route-slug>
+Branch: feature/devtest-<route-slug>
+Attempt: <attempts_used>/3
+
+Address every non-OK finding in the pr-reviewer report below. Categorise as fix_kind dev or prod per your instructions. Sanity-compile, push, end with the RESULT block.
+
+=== BRIEF ===
+<brief markdown>
+=== END BRIEF ===
+
+=== REVIEW REPORT ===
+<verbatim Markdown report from pr-reviewer, starting with the <!-- skald-pr-reviewer-report --> marker and including the **Verdict:** line and all sections>
+=== END ===
+```
+
+**`pr-reviewer` for the test PR (`subagent_type: pr-reviewer`):**
+
+```
+Task ID: <story-id>.0
+PR number: <pr_number>
+Auto-merge on approve: true
+Review scope: dev-test
+
+Anchor "Task fit" on the dev-test brief embedded in the PR body and on app/src/devTest/CLAUDE.md. Fetch PR #<pr_number> via gh, produce the review report per your instructions, then merge on approve. End your message with the RESULT block.
+```
+
+**`pr-reviewer` for the prod-fix PR (`subagent_type: pr-reviewer`):**
+
+```
+Task ID: <story-id>.0
+PR number: <prod_pr_number>
+Auto-merge on approve: true
+Review scope: prod-fix
+
+Anchor "Task fit" on the bug description in the PR body and the linked dev-test PR. Fetch PR #<prod_pr_number> via gh, produce the review report per your instructions, then merge on approve. End your message with the RESULT block.
+```
+
+### Step 2c — Per-story coverage report
+
+After every ROUTE-BRIEF for this story has been processed (or the loop short-circuited via Story-level abort), build the per-story report in Russian:
+
+```
+# История `<id>`: dev-тесты
+
+Story: <story_title>
+Эндпоинтов в покрытии: <ok_count>. Заблокировано (discovery): <blocked_count>.
+
+## Покрытие
+| Метод+путь | PR | Прогон | Попыток | Статус | Заметки |
+| --- | --- | --- | --- | --- | --- |
+| POST /api/v1/auth/register | #<pr> ✅ merged | <passed>/<test_count> | 1/3 | ✅ | — |
+| POST /api/v1/auth/login    | #<pr> ✅ merged | 4/4 | 2/3 | ✅ | auto-fixed после первого падения |
+| PATCH /api/v1/me           | #<pr> + prod #<X> | — | 1/3 | 🚫 | prod-fix #<X> pending review |
+| GET /api/v1/me/oauth       | #<pr> ⚠️ open | 3/3 | 1/3 | ⚠️ | merge blocked: branch protection |
+| DELETE /api/v1/x           | — | — | 3/3 | ❌ | fix loop exhausted: <last notes> |
+```
+
+Column legend:
+- **PR** — test PR number + ✅ merged / ⚠️ open. For prod-fix scenarios, append `+ prod #<X>` so the prod-PR is visible.
+- **Прогон** — `<passed>/<test_count>` from the last successful author run. `—` if no author run ever succeeded.
+- **Попыток** — `<attempts_used>/3`, where `attempts_used` is the number of fixer dispatches for this route.
+- **Статус**:
+  - ✅ — `final_status: green`.
+  - ⚠️ — `final_status: partial` (tests pass, merge blocked).
+  - 🚫 — `final_status: blocked` (e.g. prod-fix awaiting human review, or other principled stop).
+  - ❌ — `final_status: failed` (compile error, fix loop exhausted, deploy failed).
+
+Then the discovery-blocked table (if any):
+
+```
+## Блокировки на этапе discovery (тесты не писали)
+| Метод+путь | Причина |
+| --- | --- |
+| POST /api/v1/auth/login | controller not found |
+```
+
+If there were no discovery blockers, replace the table with the one line «Блокировок дискавери нет.».
+
+Append a one-line summary based on the aggregate:
+- Все `ok`-маршруты ended in `green` → «Dev-тесты истории `<id>` зелёные.»
+- Хотя бы один auto-fixed (`green` with `attempts_used > 1`) → «Зелёные. Авто-фикс отработал на <K> роутах.»
+- Хотя бы один `partial` / `blocked` / `failed` → «Проверь блокировки и/или PR перед промоушеном на prod.»
+- Discovery вернул `no_endpoints: true` или всё заблокировано на discovery → «Тесты не писали.»
+
+Special cases (no Step 2b executed):
+- `status: blocked` from discovery → omit «## Покрытие» and «## Блокировки на этапе discovery» entirely; print one line «Discovery упал: <orchestrator notes>».
+- `no_endpoints: true` → omit «## Покрытие»; print discovery-blocked table only if non-empty (it won't be in this case); end with «Тесты не писали — в истории не нашлось HTTP-маршрутов.».
+
+Cache this per-story report — it will be relayed in Step 3.
+
+### Step 2d — Aggregate per-story counters
+
+For each dispatched story, derive these counters for the final summary in Step 3:
+
+- `final_status_per_story` — derived from per-route `final_status` values:
+  - All routes `green` AND `ok_count > 0` → `success`.
+  - `ok_count == 0` AND `no_endpoints: true` → `success` with `no_endpoints: true`.
+  - At least one `green` AND at least one non-`green` → `partial`.
+  - No `green` AND at least one route processed → `failed`.
+  - Discovery `blocked` → `blocked`.
+- `merged` = number of routes with `final_status: green` (excluding `skipped`).
+- `open` = number of routes with `final_status: partial`.
+- `failed` = number of routes with `final_status: failed`.
+- `blocked` = number of routes with `final_status: blocked`.
+- `skipped` = number of routes where author returned `skipped`.
 
 ## Step 3 — Final output
 
-The output depends on the number of stories in the target list:
+The output depends on the number of stories in the target list.
 
 ### Single story (target list size 1)
 
@@ -106,7 +403,7 @@ If the only target was filtered out at Step 1b as not-ready, print one Russian l
 История `<id>` не готова к тестам — не завершены итерации: <list of unchecked iteration IDs>.
 ```
 
-Otherwise relay the orchestrator's per-story report verbatim. Do NOT add a top-level by-story summary — the orchestrator's report is the full answer.
+Otherwise relay the cached per-story report from Step 2c verbatim. Do NOT add a top-level by-story summary — the per-story report is the full answer.
 
 ### Multi-story (target list size > 1, or 0 args)
 
@@ -130,23 +427,23 @@ Print first the top-level summary, then per-story sections.
 
 ## История <id> — <title>
 
-<orchestrator's per-story report verbatim>
+<cached per-story report verbatim>
 
 ## История <id> — <title>
 
-<orchestrator's per-story report verbatim>
+<cached per-story report verbatim>
 
 …
 ```
 
-- Map orchestrator statuses to the table:
+- Map per-story `final_status` to the table:
   - `success` + `no_endpoints: true` → `⏭ нет эндпоинтов`
   - `success` + `no_endpoints: false` → `✅ всё зелёное`
   - `partial` → `⚠️ частично`
   - `failed` → `❌ ошибка`
   - `blocked` → `🚫 blocked`
 - Not-ready stories (filtered at Step 1b) appear in the table with `⏭ не готово к тестам` and the list of unchecked iteration IDs. No per-story section is printed for them (orchestrator was never dispatched).
-- Always include the per-story section for every **dispatched** story, even if `no_endpoints` or `blocked` — relay whatever the orchestrator printed.
+- Always include the per-story section for every **dispatched** story, even if `no_endpoints` or `blocked` — relay the report cached in Step 2c.
 - If the target list was empty after Step 1 or Step 1b, the short-circuit already printed the right line; do not print this section.
 
 No preamble, no trailing commentary outside the structures above.
