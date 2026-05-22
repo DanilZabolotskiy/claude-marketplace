@@ -1,10 +1,12 @@
 ---
-description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md — каждая история уходит в свежий story-test-orchestrator (чистый контекст), внутри он по одному дёргает dev-test-author на каждый эндпоинт
+description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md — каждая история уходит в свежий story-test-orchestrator (чистый контекст), внутри он по одному дёргает dev-test-author на каждый эндпоинт с фикс-циклом до 3 попыток (фикс тестов или прод-кода через отдельный PR + ожидание деплоя). Истории, которые ещё не завершены в iteration.md, пропускаются.
 argument-hint: [<story-id>] [+]
 allowed-tools: Task, Read, Bash, Grep, Glob
 ---
 
-Generate dev-tests for one or more stories from `task.md`. Each story is dispatched to a fresh `story-test-orchestrator` subagent — so every story starts in clean context, as if `/skald:dev-test-story` had been launched from scratch for it. The orchestrator does its own discovery (routes, OpenAPI, controllers, docs) and dispatches one `dev-test-author` per endpoint.
+Generate dev-tests for one or more stories from `task.md`. Each story is dispatched to a fresh `story-test-orchestrator` subagent — so every story starts in clean context, as if `/skald:dev-test-story` had been launched from scratch for it. The orchestrator does its own discovery (routes, OpenAPI, controllers, docs) and runs a per-endpoint state machine `dev-test-author → pr-reviewer (auto-merge) → (dev-test-fixer → author / deploy-wait → author, ≤ 3 fix attempts)`.
+
+Only **completed** stories (all iterations marked `- [x]` in `iteration.md`) are dispatched — testing in-progress code is wasted effort.
 
 Reply to the user in Russian. Do not enter plan mode — execute.
 
@@ -49,6 +51,29 @@ Each per-story orchestrator will also do its own pull when it starts, so it pick
 5. If the target list is empty (0-arg mode and no stories with iterations exist) → «В `task.md` нет историй с итерациями — запускать нечего.» stop.
 6. Print the target list to the user as a numbered list (`1. <id> — <title>`) before starting. No confirmation prompt — Auto mode.
 
+## Step 1b — Filter by `iteration.md` (only test completed stories)
+
+We only run dev-tests against stories whose code has already been merged on `dev` — testing in-progress iterations would just measure the implementation gap, not real bugs.
+
+1. Read `iteration.md` at the project root.
+   - If `iteration.md` is missing → stop with «`iteration.md` не найден — не понимаю, какие истории завершены. Запусти `/skald:dev-story` или создай файл, чтобы было откуда читать статус.»
+2. For each story in the target list, look up every one of its iteration IDs (collected in Step 1) in `iteration.md`:
+   - For each `<story>.<N>`, search for a line that contains the bold id (e.g. `**22.1**`) AND a checkbox.
+   - `- [x]` → iteration is **done**.
+   - `- [ ]` → iteration is **not done**.
+   - Line not found → iteration is **not done**.
+3. A story is **eligible for testing** ⇔ every one of its iterations is `- [x]`. Otherwise mark it as `not-ready`.
+4. **Not-ready stories are skipped** — do NOT dispatch the orchestrator. Record them in the final report as `⏭ не готово к тестам` with the list of unchecked iteration IDs in the notes column.
+5. If after filtering the dispatch list is empty (zero eligible stories), print one Russian line and stop:
+
+   ```
+   Ни одна история не готова к тестам (все имеют незавершённые итерации в iteration.md).
+   ```
+
+   Skip Step 2 entirely. Go straight to Step 3 to print the not-ready summary.
+
+6. Print the filtered dispatch list (eligible stories only) to the user as a numbered list before starting Step 2. Note separately how many were filtered out.
+
 ## Step 2 — Per-story dispatch
 
 Run orchestrators **sequentially**. No parallelism — `dev` is shared, `task.md` is shared, each orchestrator's authors merge PRs that the next orchestrator must see.
@@ -75,7 +100,13 @@ The output depends on the number of stories in the target list:
 
 ### Single story (target list size 1)
 
-Relay the orchestrator's per-story report verbatim. Do NOT add a top-level by-story summary — the orchestrator's report is the full answer.
+If the only target was filtered out at Step 1b as not-ready, print one Russian line and stop:
+
+```
+История `<id>` не готова к тестам — не завершены итерации: <list of unchecked iteration IDs>.
+```
+
+Otherwise relay the orchestrator's per-story report verbatim. Do NOT add a top-level by-story summary — the orchestrator's report is the full answer.
 
 ### Multi-story (target list size > 1, or 0 args)
 
@@ -84,7 +115,7 @@ Print first the top-level summary, then per-story sections.
 ```
 # Прогон dev-тестов по историям: итог
 
-Всего историй: <T>. ✅ зелёные: <S>. ⚠️ частично: <P>. ❌ ошибки: <F>. 🚫 blocked: <B>.
+Всего историй в таргете: <T>. ✅ зелёные: <S>. ⚠️ частично: <P>. ❌ ошибки: <F>. 🚫 blocked: <B>. ⏭ не готово к тестам: <NR>.
 
 | История | Статус | Покрыто/Эндпоинтов | Заметки |
 | --- | --- | --- | --- |
@@ -93,6 +124,7 @@ Print first the top-level summary, then per-story sections.
 | <id> — <title> | ❌ ошибка | 0/<ok_count> | <notes> |
 | <id> — <title> | 🚫 blocked | — | <notes> |
 | <id> — <title> | ⏭ нет эндпоинтов | — | в истории не нашлось HTTP-маршрутов |
+| <id> — <title> | ⏭ не готово к тестам | — | не закрыты итерации: <list> |
 
 ---
 
@@ -113,7 +145,8 @@ Print first the top-level summary, then per-story sections.
   - `partial` → `⚠️ частично`
   - `failed` → `❌ ошибка`
   - `blocked` → `🚫 blocked`
-- Always include the per-story section for every dispatched story, even if `no_endpoints` or `blocked` — relay whatever the orchestrator printed.
-- If the target list was empty, the Step 1 short-circuit already printed the right line; do not print this section.
+- Not-ready stories (filtered at Step 1b) appear in the table with `⏭ не готово к тестам` and the list of unchecked iteration IDs. No per-story section is printed for them (orchestrator was never dispatched).
+- Always include the per-story section for every **dispatched** story, even if `no_endpoints` or `blocked` — relay whatever the orchestrator printed.
+- If the target list was empty after Step 1 or Step 1b, the short-circuit already printed the right line; do not print this section.
 
 No preamble, no trailing commentary outside the structures above.
