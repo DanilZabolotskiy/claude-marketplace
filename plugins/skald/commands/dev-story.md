@@ -1,124 +1,114 @@
 ---
-description: Execute an entire story from task.md iteration by iteration — dev → review → (fix+review up to 3x) → merge — for every iteration in order
-argument-hint: <story-id>
+description: Execute one or more stories from task.md end-to-end via story-orchestrator subagents (each story in clean context)
+argument-hint: [<story-id>] [+]
 allowed-tools: Task, Bash, Read, Grep
 ---
 
-Execute story `$1` from `task.md` end-to-end. For each iteration in order: implement via `dev-executor`, review via `pr-reviewer`, run a fix-and-review loop if needed (up to 3 attempts), then merge the PR and proceed to the next iteration. Reply to the user in Russian.
+Execute stories from `task.md` end-to-end. Each story is dispatched to a fresh `story-orchestrator` subagent, so every story starts in clean context — as if `/skald:dev-story` had been launched from scratch for it. Reply to the user in Russian.
 
-## Validation
+## Arguments
 
-- `$1` must match the regex `^\d+$` (e.g. `22`).
-- If the argument is missing or invalid, print a one-line error with usage: `Usage: /skald:dev-story <story-id>` and stop without doing anything else.
+The command accepts zero, one, or two positional arguments:
 
-## Discover iterations
+- **0 args** — `/skald:dev-story` — process **every** story in `task.md` in document order.
+- **1 arg** — `/skald:dev-story <N>` — process **only** story `<N>`. `<N>` must match `^\d+$`.
+- **2 args** — `/skald:dev-story <N> +` — process every story in `task.md` in document order **starting from story `<N>`** (inclusive). `<N>` must match `^\d+$`, the second arg must be literally `+`.
 
-1. Read `task.md` at the project root. If the file is missing, stop with a one-line error.
-2. Find every heading that matches one of these forms, in the order they appear:
-   - `#### Итерация $1.<N>:` (Russian H4 — used by the bundled example)
-   - `### Iteration $1.<N>` (English H3)
-3. Extract the ordered list of iteration IDs (`$1.1`, `$1.2`, …). De-duplicate while preserving order.
-4. If the list is empty, stop and report: «В `task.md` не найдено ни одной итерации истории `$1`».
-5. Print the discovered list to the user and begin execution. Do not ask for confirmation — in Auto mode just proceed.
-
-## Per-iteration loop
-
-Process iterations strictly in order. Maintain a running log of outcomes per iteration (status, PR number, merge result, notes) to build the final report.
-
-For each iteration `<iter>`:
-
-### 1. Dev phase
-
-Launch the `dev-executor` subagent via the Task tool with this exact prompt (substitute `<iter>`):
+If the arguments don't fit any of the three forms, print one Russian line and stop:
 
 ```
-Task ID: <iter>
-
-Implement iteration <iter> from task.md per your instructions. Create the feature branch off `dev`, implement only what the iteration section describes, run build and tests, open a PR into `dev`. End your message with the RESULT block.
+Использование: /skald:dev-story [<story-id>] [+]
 ```
 
-Parse the `===RESULT===` block from the subagent's reply:
+## Discover stories (document order)
 
-- `status: blocked` → stop the whole story. Record the iteration as failed at the dev stage. Go to the final report.
-- `status: failed` → stop the whole story. Record the iteration as failed at the dev stage. Go to the final report.
-- `status: success` → capture `pr_number` and `branch`, continue to the review phase.
+1. Read `task.md` at the project root. If missing, stop with one Russian line: «`task.md` не найден.»
+2. Walk the file top-to-bottom and collect every H3 story heading **in the order it appears in the file**, NOT sorted by id. Accept either form:
+   - `### Story <N>: <title>`
+   - `### История <N>: <title>`
+3. For each story, capture the body between its H3 and the next H3 (or EOF). Look for at least one H4 iteration heading of the form `#### Iteration <N>.<M>:` or `#### Итерация <N>.<M>:`. Stories with zero iterations are skipped silently (they were not planned yet).
+4. Build the **target list** from this ordered set of stories-with-iterations:
+   - **0 args:** all of them, in document order.
+   - **1 arg `<N>`:** the single entry for `<N>`. If not present, stop with «История `<N>` не найдена в `task.md` или не имеет итераций.»
+   - **2 args `<N> +`:** the suffix starting from `<N>` inclusive. If `<N>` not present, stop with the same line as above.
+5. Print the target list to the user as a numbered list (`1. <id> — <title>`) before starting. No confirmation prompt — Auto mode.
 
-### 2. Review phase (first pass)
+## Done-detection (skip already-finished stories)
 
-Launch the `pr-reviewer` subagent via the Task tool with this exact prompt (substitute values, keep the wording otherwise):
+Before dispatching a story, check whether it is already done:
 
-```
-Task ID: <iter>
-PR number: <pr_number>
+1. If `iteration.md` does not exist at the project root, the story is **not done** (no marker to consult). Proceed to dispatch.
+2. Otherwise, for every H4 iteration of this story collected during discovery (e.g. `22.1`, `22.2`, …), look in `iteration.md` for a line that contains the bold id (e.g. `**22.1**`) AND a checkbox:
+   - `- [x]` → that iteration is done.
+   - `- [ ]` → that iteration is NOT done.
+   - line not found → that iteration is NOT done.
+3. If **every** iteration of the story is marked `- [x]` in `iteration.md`, the story is **done**. Record it in the final report as `⏭ пропущено (уже готово)` and DO NOT launch the subagent.
+4. Otherwise dispatch the subagent.
 
-Read `task.md` at the project root, locate section `### Iteration <iter>`, fetch PR #<pr_number> via gh, and produce the review report per your instructions.
-```
+Note: a story with `+` mode reaches done-detection in document order; skipping it does NOT abort the batch — keep going to the next target.
 
-Parse the `**Verdict:**` line from the report:
+## Per-story dispatch
 
-- `approve` → go to the merge phase.
-- `comment` → treat as approve. Go to the merge phase (non-blocking comments will be included in the final report).
-- `request-changes` → enter the fix loop.
+Run subagents **sequentially**. No parallelism — `dev` is shared, `task.md` is shared.
 
-Keep the full review report text — you will pass it verbatim to `fix-executor` if needed.
+For each target story `<id>` in the list:
 
-### 3. Fix loop (up to 3 attempts)
-
-For `attempt` in `1`, `2`, `3`:
-
-a. Launch the `fix-executor` subagent via the Task tool with this exact prompt (substitute values):
-
-```
-Task ID: <iter>
-PR number: <pr_number>
-Branch: <branch>
-Attempt: <attempt>/3
-
-Review report:
-<the full review report verbatim, including the Verdict line>
-
-Address every non-OK finding in the report per your instructions, run build and tests, push to the same branch. End your message with the RESULT block.
-```
-
-Parse its `===RESULT===`:
-
-- `blocked` or `failed` → stop the whole story. Record the iteration as failed at the fix stage with the `notes` field. Go to the final report.
-- `success` → re-run the review.
-
-b. Re-launch `pr-reviewer` with the same prompt as in step 2. Parse the new `Verdict`:
-
-- `approve` or `comment` → break out of the fix loop, go to the merge phase.
-- `request-changes` → save the new report, proceed to the next attempt.
-
-If the fix loop exits without approval after the 3rd attempt, stop the whole story with the message: «Итерация `<iter>`: 3 попытки исправлений не прошли ревью. PR #<pr_number> остаётся открытым.» Record the iteration as failed at the fix stage, include the last review report excerpt in the final report.
-
-### 4. Merge phase
-
-Run: `gh pr merge <pr_number> --squash --delete-branch`
-
-- If the command succeeds, record the iteration as approved+merged and continue to the next iteration.
-- If the command fails (branch protection, required checks, network), stop the whole story. Record the iteration as failed at the merge stage. Include the stderr of `gh` in `notes`. Do NOT retry, do NOT use `--admin` unless the user explicitly asked for it.
-
-After a successful merge, the next iteration's `dev-executor` will see the merged commit on `dev` because it starts with `git checkout dev && git pull`.
-
-## Final report (Russian)
-
-When the loop ends — whether by completing all iterations or by stopping early — print a single Russian summary to the user:
+1. If done-detection marked it as already finished, record `skipped` and continue.
+2. Otherwise, launch the `story-orchestrator` subagent via the Task tool with this exact prompt (substitute `<id>`):
 
 ```
-# История <story-id>: итог
+Story ID: <id>
 
-Всего итераций: <n>. Успешно: <k>. Провалено: <m>. Не запущено: <rest>.
+Execute story <id> from task.md end-to-end per your instructions. For each iteration in document order: dev-executor → pr-reviewer → (fix-executor + pr-reviewer up to 3x) → gh pr merge. Print the per-iteration Russian table and end your message with the STORY-RESULT block.
+```
 
-| Итерация | Статус | PR | Заметки |
+3. Parse the `===STORY-RESULT===` block from the subagent's reply. Capture: `status`, `total`, `succeeded`, `failed_iteration`, `failed_stage`, `notes`.
+4. Capture the subagent's per-iteration Russian table (the part above the STORY-RESULT block) verbatim — it will be relayed in the final output.
+5. **Failure handling:** regardless of `status` (`success` / `partial` / `failed` / `blocked`), **always move to the next story**. Never abort the batch because one story stumbled. The story-orchestrator already stops the story itself on internal failure; this command only orchestrates between stories.
+
+Safety cap: at most one dispatch per story in the target list. No retries.
+
+## Final output
+
+The output depends on the number of stories actually dispatched (excluding `skipped`):
+
+### Single story (target list size 1)
+
+Relay the orchestrator's per-iteration table verbatim. Do NOT add a top-level by-story summary — the orchestrator's own report is the full answer.
+
+If the only target was skipped via done-detection, print one Russian line: «История `<id>` уже завершена — все итерации помечены в `iteration.md`.»
+
+### Multi-story (target list size > 1, or 0 args)
+
+Print first the top-level summary, then per-story sections.
+
+```
+# Прогон историй: итог
+
+Всего историй: <T>. ✅ замёрджено: <S>. ⚠️ частично: <P>. ❌ ошибки: <F>. ⏭ пропущено (готово): <K>.
+
+| История | Статус | Успешно/Всего | Заметки |
 | --- | --- | --- | --- |
-| <iter> | ✅ approved+merged | #<pr> | <if comment-verdict, brief note> |
-| <iter> | ❌ failed at <stage> | #<pr или —> | <reason from notes> |
-| <iter> | ⏭ не запущено | — | — |
+| <id> — <title> | ✅ всё замёрджено | <k>/<n> | — |
+| <id> — <title> | ⚠️ частично замёрджено | <k>/<n> | итерация <iter> — <stage>, <notes> |
+| <id> — <title> | ❌ ошибка | 0/<n> | итерация <iter> — <stage>, <notes> |
+| <id> — <title> | 🚫 blocked | — | <notes> |
+| <id> — <title> | ⏭ пропущено (готово) | — | все итерации помечены в `iteration.md` |
+
+---
+
+## История <id> — <title>
+
+<orchestrator's per-iteration table verbatim>
+
+## История <id> — <title>
+
+<orchestrator's per-iteration table verbatim>
+
+…
 ```
 
-- `stage` ∈ `dev`, `review`, `fix`, `merge`.
-- If the failure happened in `fix`, include a one-line hint pointing at the open PR.
-- If all iterations finished green, append one line: «Все итерации истории <story-id> замёрджены в `dev`.»
+- Skip the per-story section for stories that were skipped via done-detection (they have no orchestrator output).
+- If the target list was empty (e.g. 0-arg mode and no stories with iterations exist), print one Russian line: «В `task.md` нет историй с итерациями — запускать нечего.»
 
-No preamble, no trailing commentary.
+No preamble, no trailing commentary outside the structures above.

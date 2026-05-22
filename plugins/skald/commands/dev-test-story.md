@@ -1,208 +1,119 @@
 ---
-description: Сгенерировать black-box тесты для всей истории task.md — команда собирает список API и по одному делегирует агенту, каждый эндпоинт = свой PR
-argument-hint: <story-id>
+description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md — каждая история уходит в свежий story-test-orchestrator (чистый контекст), внутри он по одному дёргает dev-test-author на каждый эндпоинт
+argument-hint: [<story-id>] [+]
 allowed-tools: Task, Read, Bash, Grep, Glob
 ---
 
-Generate dev-tests for story `$1` from `task.md`. The command discovers the HTTP surface of the story, then dispatches **one fresh `dev-test-author` per endpoint** — each agent runs in clean context, covers exactly one route, and ships its own PR into `dev`.
+Generate dev-tests for one or more stories from `task.md`. Each story is dispatched to a fresh `story-test-orchestrator` subagent — so every story starts in clean context, as if `/skald:dev-test-story` had been launched from scratch for it. The orchestrator does its own discovery (routes, OpenAPI, controllers, docs) and dispatches one `dev-test-author` per endpoint.
 
 Reply to the user in Russian. Do not enter plan mode — execute.
 
-## Validation
+## Arguments
 
-- `$1` must match `^\d+$` (e.g. `12`, `17`).
-- If missing or invalid → print «Использование: `/skald:dev-test-story <story-id>`.» and stop.
+The command accepts zero, one, or two positional arguments:
 
-## Step 1 — Sync working tree to dev
+- **0 args** — `/skald:dev-test-story` — process **every** story in `task.md` in document order.
+- **1 arg** — `/skald:dev-test-story <N>` — process **only** story `<N>`. `<N>` must match `^\d+$`.
+- **2 args** — `/skald:dev-test-story <N> +` — process every story in `task.md` in document order **starting from story `<N>`** (inclusive). `<N>` must match `^\d+$`, the second arg must be literally `+`.
+
+If the arguments don't fit any of the three forms, print one Russian line and stop:
+
+```
+Использование: /skald:dev-test-story [<story-id>] [+]
+```
+
+## Step 0 — Sanity check working tree
 
 ```
 git checkout dev && git pull --ff-only
 ```
 
 - Dirty working copy → stop with «Грязная рабочая копия — закоммить или спрячь изменения и запусти команду снова.» Do not stash.
-- Pull conflict / non-fast-forward → stop with the git error and ask user to resolve.
+- Pull conflict / non-fast-forward → stop with the git error and ask the user to resolve.
 
-The command reads files in the working tree, so the tree must reflect `dev` to give a deterministic surface.
+Each per-story orchestrator will also do its own pull when it starts, so it picks up commits merged during the batch.
 
-## Step 2 — Discover iteration bodies
+## Step 1 — Discover stories (document order)
 
 1. Read `task.md` at the project root. If missing → «`task.md` не найден.» stop.
-2. Locate every iteration heading for story `$1` in document order:
-   - `#### Iteration $1.<N>:`, `#### Итерация $1.<N>:`, `### Iteration $1.<N>`, `### Итерация $1.<N>`.
-3. For each iteration capture the body — text between this heading and the next iteration heading (any story) or EOF.
-4. Capture the story heading itself for the title.
-5. If no iterations → «В `task.md` не найдено итераций истории `$1`.» stop.
-6. **Ignore `iteration.md` entirely.** Done-markers are not a precondition.
+2. Walk the file top-to-bottom and collect every H3 story heading **in the order it appears in the file**, NOT sorted by id. Accept either form:
+   - `### Story <N>: <title>`
+   - `### История <N>: <title>`
+3. For each story, capture the body between its H3 and the next H3 (or EOF). Look for at least one iteration heading:
+   - `#### Iteration <N>.<M>:`, `#### Итерация <N>.<M>:`, `### Iteration <N>.<M>`, `### Итерация <N>.<M>`.
+   Stories with zero iterations are skipped silently (nothing to discover routes from).
+4. Build the **target list** from this ordered set of stories-with-iterations:
+   - **0 args:** all of them, in document order.
+   - **1 arg `<N>`:** the single entry for `<N>`. If not present, stop with «История `<N>` не найдена в `task.md` или не имеет итераций.»
+   - **2 args `<N> +`:** the suffix starting from `<N>` inclusive. If `<N>` not present, stop with the same line as above.
+5. If the target list is empty (0-arg mode and no stories with iterations exist) → «В `task.md` нет историй с итерациями — запускать нечего.» stop.
+6. Print the target list to the user as a numbered list (`1. <id> — <title>`) before starting. No confirmation prompt — Auto mode.
 
-## Step 3 — Extract candidate routes
+## Step 2 — Per-story dispatch
 
-Concatenate all iteration bodies and scan for HTTP-route mentions. Union the matches:
+Run orchestrators **sequentially**. No parallelism — `dev` is shared, `task.md` is shared, each orchestrator's authors merge PRs that the next orchestrator must see.
 
-- Plain HTTP-mention: `(GET|POST|PATCH|PUT|DELETE)\s+/api/v1/[^\s`)\]]+`
-- Cyrillic controller-line: lines containing `Контроллер` or `REST-эндпоинт` followed by a method+path on the same line.
-- Public special endpoints if mentioned literally (e.g. `GET /.well-known/jwks.json`).
+For each target story `<id>` in the list:
 
-Deduplicate by `(method, path)` — normalize the path by stripping trailing punctuation `,`/`;`/`:`/`.`/backticks. For each unique route capture the first iteration whose body contained it (`fromIteration`).
-
-If candidate list is empty → print final report «У истории `$1` нет упоминаний HTTP-эндпоинтов в `task.md` — тесты не нужны.» and stop without launching any subagent.
-
-## Step 4 — Cross-check contracts/openapi.yaml
-
-Read `contracts/openapi.yaml`. For each candidate `{method, path}`:
-
-- Path + method present → status `ok`. Capture `requestBody` schema name (or `null`) and `responses` map (`{ status: schema-or-Problem }`).
-- Path / method missing → status `blocked_no_openapi`.
-
-## Step 5 — Locate controller files
-
-For each `ok` candidate, Grep across:
-
-- `modules/*/adapter/in/web/**`
-- `modules/*/*/adapter/in/web/**`
-- `app/src/main/kotlin/**/adapter/in/web/**`
-
-Search for the path literal AND the matching method annotation (`@PostMapping`, `@GetMapping`, `@PatchMapping`, `@PutMapping`, `@DeleteMapping`, or `@RequestMapping(method = ...)`).
-
-- Exactly one matching controller → capture `controllerFile` and `controllerClass`.
-- Multiple → pick the file matching the method.
-- Not found → `blocked_no_controller`.
-
-## Step 6 — Pull docs context per route
-
-Group `ok` routes by owning module (derive from controller path: `modules/<module>/...`). For each route:
-
-1. Read `docs/tech_spec/api/<module>.md` if it exists.
-2. Always read `docs/tech_spec/api/_auth.md` and `docs/tech_spec/api/_conventions.md` — cross-cutting rules (rate-limits, password policy, RFC 7807 problem+json, idempotency).
-3. Extract for the brief:
-   - error codes mentioned in connection with this path (`weak_password`, `email_taken`, `validation_error`, `invalid_token`, `invalid_credentials`, `oauth_*`, …);
-   - rate-limit bullets explicitly tied to the path;
-   - header invariants (`Accept-Language` seeding, `ETag`, `If-Match`, `Authorization`, `Set-Cookie` for refresh);
-   - acceptance bullets from the iteration body that name the path or method.
-
-Best-effort: if a doc is missing, leave fields empty for that route.
-
-## Step 7 — Pre-flight summary
-
-Before dispatching agents, print a Russian summary so the user (and you) see exactly what will be tested and what will be skipped:
+1. Launch the `story-test-orchestrator` subagent via the Task tool with this exact prompt (substitute `<id>`):
 
 ```
-# История `$1`: dev-тесты — план
+Story ID: <id>
 
-Story: <heading>
-
-К покрытию (<ok-count> эндпоинтов):
-- POST /api/v1/auth/register — identity/.../AuthRegisterController.kt (источник: 12.7)
-- ...
-
-Заблокировано (<blocked-count>):
-- POST /api/v1/auth/login — controller not found
-- ... (или «нет»)
-
-Запускаю агентов по одному, последовательно.
+Generate dev-tests for story <id> from task.md per your instructions. Sync to dev, discover routes via task.md + OpenAPI + controllers + docs, dispatch one fresh dev-test-author per endpoint sequentially, then print the per-story report and end your message with the STORY-TEST-RESULT block.
 ```
 
-If zero `ok` routes (all blocked or none found) → print the summary, then write the final report (Step 9) with synthetic skipped result and stop.
+2. Parse the `===STORY-TEST-RESULT===` block. Capture: `status`, `ok_count`, `merged`, `open`, `failed`, `blocked`, `skipped`, `no_endpoints`, `notes`.
+3. Capture the orchestrator's per-story report (the part above STORY-TEST-RESULT) verbatim — it will be relayed in the final output for multi-story mode.
+4. **Failure handling:** regardless of `status` (`success` / `partial` / `failed` / `blocked`), **always move to the next story**. Never abort the batch because one story stumbled. The orchestrator stops its own loop on internal failure; this command only orchestrates between stories.
 
-## Step 8 — Dispatch agents per endpoint
+Safety cap: at most one dispatch per story in the target list. No retries.
 
-For each `ok` route in source order:
+## Step 3 — Final output
 
-1. Compute the route-slug: strip leading `/`, strip `api/v1/`, replace remaining `/` with `_`, replace remaining non-alphanumeric (except `_` and `-`) with `_`, lowercase. Examples:
-   - `/api/v1/auth/register` → `authregister` (note: also collapse the first segment if single-word — `auth_register` is acceptable; pick `auth_register` for consistency, see below)
-   - Use the simpler rule: drop `api/v1/` and lowercase everything else; replace `/` with `_`. So `/api/v1/auth/register` → `auth_register`. `/api/v1/auth/email/verify-confirm` → `auth_email_verify-confirm`. `/.well-known/jwks.json` → `wellknown_jwks`.
-2. Build a single-route brief (Markdown). Plain text, easier than JSON for the agent:
+The output depends on the number of stories in the target list:
 
-   ```
-   # Dev-test brief
+### Single story (target list size 1)
 
-   Story: <story-id> — <story title>
-   Source iteration: <fromIteration>
-   Method: <METHOD>
-   Path: <path>
-   Route slug: <route-slug>
+Relay the orchestrator's per-story report verbatim. Do NOT add a top-level by-story summary — the orchestrator's report is the full answer.
 
-   ## Controller
-   <controllerFile>:<controllerClass>
+### Multi-story (target list size > 1, or 0 args)
 
-   ## OpenAPI
-   - Request body schema: <schema name or "none">
-   - Responses:
-     - 201 → <schema>
-     - 400 → Problem (codes: weak_password, validation_error)
-     - 409 → Problem (codes: email_taken)
-     - ...
-
-   ## Headers / invariants
-   - <Accept-Language seeds users.locale on first authed request>
-   - <refresh-cookie httpOnly+Secure+SameSite=Strict, path /api/v1/auth/refresh>
-   - (или «нет»)
-
-   ## Rate-limit
-   <e.g. 5/IP/час> (or "не задан")
-
-   ## Acceptance (from iteration body)
-   - <bullet>
-   - <bullet>
-
-   ## Doc references
-   - docs/tech_spec/api/<module>.md
-   - docs/tech_spec/api/_auth.md § <section>
-   - docs/tech_spec/api/_conventions.md § <section>
-   ```
-
-3. Launch a **fresh** `dev-test-author` via the Task tool with this prompt (substitute placeholders verbatim, keep the rest as-is):
-
-   ```
-   Story ID: <story-id>
-   Route: <METHOD> <path>
-   Route slug: <route-slug>
-
-   Implement the dev-test class for the single endpoint described in the brief below. Branch off `dev` as `feature/devtest-<route-slug>`. Place tests under `app/src/devTest/kotlin/so/skald/app/devtest/<route-slug>/<Feature>DevApiTest.kt`. Run via `./script/dev-test.sh --tests "..."`. Open one PR into `dev` and squash-merge it. End your message with the RESULT block.
-
-   === BRIEF ===
-   <brief markdown>
-   === END BRIEF ===
-   ```
-
-   Always pass `subagent_type: dev-test-author`. **One agent at a time, sequentially** — do not parallelise (each agent runs `git checkout dev && git pull` and opens/merges a PR; parallel runs would race on the working tree and on `dev`).
-
-4. Parse the agent's `===RESULT===` block (`status`, `pr_number`, `branch`, `merged`, `test_count`, `passed`, `failed`, `notes`). Capture all fields.
-
-5. Stop conditions:
-   - `failed` or `blocked` on one route → continue with the next route (one bad endpoint must not stop the rest); flag it in the final report. Exception: if the agent reports a `dirty working tree` blocker, stop the whole loop with that message.
-   - `success` / `skipped` → continue.
-
-6. Move to the next route.
-
-## Step 9 — Final report (Russian)
-
-After every `ok` route is processed (or step 7 short-circuited), print exactly:
+Print first the top-level summary, then per-story sections.
 
 ```
-# История `<story-id>`: dev-тесты
+# Прогон dev-тестов по историям: итог
 
-Story: <heading>
-Эндпоинтов в покрытии: <ok-count>. Заблокировано: <blocked-count>.
+Всего историй: <T>. ✅ зелёные: <S>. ⚠️ частично: <P>. ❌ ошибки: <F>. 🚫 blocked: <B>.
 
-## Покрытие
-| Метод+путь | PR | Прогон | Статус | Заметки |
-| --- | --- | --- | --- | --- |
-| POST /api/v1/auth/register | #<pr> ✅ merged | <passed>/<test_count> | ✅ | — |
-| GET /api/v1/me/oauth | #<pr> ⚠️ open | 3/3 | ⚠️ merge blocked | branch protection |
-| ... |
+| История | Статус | Покрыто/Эндпоинтов | Заметки |
+| --- | --- | --- | --- |
+| <id> — <title> | ✅ всё зелёное | <merged>/<ok_count> | — |
+| <id> — <title> | ⚠️ частично | <merged>/<ok_count> | <f> failed, <b> blocked, <o> open |
+| <id> — <title> | ❌ ошибка | 0/<ok_count> | <notes> |
+| <id> — <title> | 🚫 blocked | — | <notes> |
+| <id> — <title> | ⏭ нет эндпоинтов | — | в истории не нашлось HTTP-маршрутов |
 
-## Блокировки (тесты не писали)
-| Метод+путь | Причина |
-| --- | --- |
-| POST /api/v1/auth/login | controller not found |
-| ... |
+---
 
-(если блокировок нет — таблицу опустить и написать «Блокировок нет.»)
+## История <id> — <title>
+
+<orchestrator's per-story report verbatim>
+
+## История <id> — <title>
+
+<orchestrator's per-story report verbatim>
+
+…
 ```
 
-Append:
-- Все `ok`-маршруты merged и зелёные → «Dev-тесты истории `<id>` зелёные.»
-- Хотя бы один failed/blocked/не merged → «Проверь блокировки и/или PR перед промоушеном на prod.»
-- Skipped (нет кандидатов или все blocked) → «Тесты не писали.»
+- Map orchestrator statuses to the table:
+  - `success` + `no_endpoints: true` → `⏭ нет эндпоинтов`
+  - `success` + `no_endpoints: false` → `✅ всё зелёное`
+  - `partial` → `⚠️ частично`
+  - `failed` → `❌ ошибка`
+  - `blocked` → `🚫 blocked`
+- Always include the per-story section for every dispatched story, even if `no_endpoints` or `blocked` — relay whatever the orchestrator printed.
+- If the target list was empty, the Step 1 short-circuit already printed the right line; do not print this section.
 
-No preamble, no trailing commentary outside this report.
+No preamble, no trailing commentary outside the structures above.
