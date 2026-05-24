@@ -35,20 +35,30 @@ git checkout dev && git pull --ff-only
 
 ## Step 1 — Discover stories and iterations (document order)
 
+> **Critical ordering rule.** Stories are processed in the order they physically appear in `task.md`, **not** by numeric story id. Story ids do not have to be monotonic — `task.md` may legitimately list Story 7 before Story 5, and that is the order they must run in. Never sort, re-order, or compare ids numerically when building or iterating the target list. If you find yourself wanting to write `sort` or compare `<id_a> < <id_b>`, you are doing it wrong — use the index in the document-order list instead.
+
 1. Read `task.md` at the project root. If missing → «`task.md` не найден.» stop.
 2. Walk the file top-to-bottom and collect every H3 story heading **in the order it appears in the file**, NOT sorted by id. Accept either form:
    - `### Story <N>: <title>`
    - `### История <N>: <title>`
+
+   Concrete example — if `task.md` contains headings in this physical order:
+   ```
+   ### Story 7: …
+   ### Story 5: …
+   ### Story 10: …
+   ```
+   the collected list is `[7, 5, 10]` and that is the dispatch order. It is NOT `[5, 7, 10]`.
 3. For each story, capture the body between its H3 and the next H3 (or EOF). Scan the body for every iteration heading in document order and capture the ordered list of iteration IDs:
    - `#### Iteration <N>.<M>:`, `#### Итерация <N>.<M>:`, `### Iteration <N>.<M>`, `### Итерация <N>.<M>`.
    - De-duplicate while preserving order.
    - Stories with zero iterations are skipped silently (nothing to execute).
-4. Build the **target list** from this ordered set of stories-with-iterations:
+4. Build the **target list** from this ordered set of stories-with-iterations. In every form the list is a contiguous slice of the document-ordered list from Step 2 — never a numeric-range filter:
    - **0 args:** all of them, in document order.
    - **1 arg `<N>`:** the single entry for `<N>`. If not present, stop with «История `<N>` не найдена в `task.md` или не имеет итераций.»
-   - **2 args `<N> +`:** the suffix starting from `<N>` inclusive. If `<N>` not present, stop with the same line as above.
+   - **2 args `<N> +`:** the **document-order** suffix starting from the position of `<N>` in the Step-2 list, inclusive. Find the index of `<N>` and take that element plus everything after it in document order — do NOT take «every story whose id ≥ N». In the `[7, 5, 10]` example, `/skald:dev-story 7 +` dispatches `[7, 5, 10]`, and `/skald:dev-story 5 +` dispatches `[5, 10]`. If `<N>` not present, stop with the same line as above.
 5. If the target list is empty (0-arg mode and no stories with iterations exist) → «В `task.md` нет историй с итерациями — запускать нечего.» stop.
-6. Print the target list to the user as a numbered list (`1. <id> — <title> (итераций: <K>)`) before starting. No confirmation prompt — Auto mode.
+6. Print the target list to the user as a numbered list (`1. <id> — <title> (итераций: <K>)`) before starting — the numbering is the dispatch index (1, 2, 3…), the `<id>` is the story id, and the rows must appear in document order. No confirmation prompt — Auto mode.
 
 ## Step 1b — Done-detection (skip already-finished stories)
 
@@ -76,9 +86,9 @@ Print the filtered dispatch list (eligible stories only) as a numbered list befo
 
 ## Step 2 — Per-story pipeline
 
-Run stories **sequentially**. No parallelism — `dev` is shared, `task.md` is shared, each story's merges must be visible to the next story's discovery.
+Run stories **sequentially** and **in the order of the filtered dispatch list from Step 1b** — that list is already in document order (see the Critical ordering rule in Step 1). Do not re-sort by id at this stage. No parallelism — `dev` is shared, `task.md` is shared, each story's merges must be visible to the next story's discovery.
 
-For each target story `<id>` in the filtered dispatch list, do Steps 2a → 2c in order. Between stories, re-sync the main session's working tree (so the next story sees PRs merged by the previous one):
+For each target story `<id>` in the filtered dispatch list (document order), do Steps 2a → 2c in order. Between stories, re-sync the main session's working tree (so the next story sees PRs merged by the previous one):
 
 ```
 git checkout dev && git pull --ff-only
