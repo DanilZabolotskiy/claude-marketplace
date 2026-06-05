@@ -1,6 +1,6 @@
 ---
-description: Execute one or more stories from task.md end-to-end. For each iteration runs dev-executor → pr-reviewer (auto-merge) → (fix-executor + pr-reviewer up to 3x) in the main session. No nested-subagent dispatching — the per-iteration state machine lives here.
-argument-hint: [<story-id>] [+]
+description: Execute one or more stories from task.md end-to-end. For each iteration runs dev-executor → pr-reviewer (auto-merge) → (fix-executor + pr-reviewer up to 3x) in the main session. Optional `tests` flag chains /skald:dev-test-story for each successfully implemented story before moving to the next one. No nested-subagent dispatching — the per-iteration state machine lives here.
+argument-hint: [<story-id>] [+] [tests]
 allowed-tools: Task, Bash, Read, Grep, Glob
 ---
 
@@ -12,16 +12,26 @@ Reply to the user in Russian. Do not enter plan mode — execute.
 
 ## Arguments
 
-The command accepts zero, one, or two positional arguments:
+The command accepts positional arguments in three base forms, optionally followed by the literal flag `tests`:
 
 - **0 args** — `/skald:dev-story` — process **every** story in `task.md` in document order.
 - **1 arg** — `/skald:dev-story <N>` — process **only** story `<N>`. `<N>` must match `^\d+$`.
 - **2 args** — `/skald:dev-story <N> +` — process every story in `task.md` in document order **starting from story `<N>`** (inclusive). `<N>` must match `^\d+$`, the second arg must be literally `+`.
 
-If the arguments don't fit any of the three forms, print one Russian line and stop:
+The optional `tests` flag must be the **last** token. When present, after each story finishes with every iteration green, the command immediately runs the `/skald:dev-test-story` per-story pipeline for that story (Step 2d) — then moves on to the next story. Combinations:
+
+- `/skald:dev-story tests`
+- `/skald:dev-story <N> tests`
+- `/skald:dev-story <N> + tests`
+
+Parse arguments as follows:
+
+1. If the **last** token is exactly `tests`, strip it and set `tests_after: true`. Otherwise `tests_after: false`.
+2. The remaining 0/1/2 tokens must match one of the three base forms above.
+3. If neither check holds, print one Russian line and stop:
 
 ```
-Использование: /skald:dev-story [<story-id>] [+]
+Использование: /skald:dev-story [<story-id>] [+] [tests]
 ```
 
 ## Step 0 — Sanity check working tree
@@ -88,7 +98,7 @@ Print the filtered dispatch list (eligible stories only) as a numbered list befo
 
 Run stories **sequentially** and **in the order of the filtered dispatch list from Step 1b** — that list is already in document order (see the Critical ordering rule in Step 1). Do not re-sort by id at this stage. No parallelism — `dev` is shared, `task.md` is shared, each story's merges must be visible to the next story's discovery.
 
-For each target story `<id>` in the filtered dispatch list (document order), do Steps 2a → 2c in order. Between stories, re-sync the main session's working tree (so the next story sees PRs merged by the previous one):
+For each target story `<id>` in the filtered dispatch list (document order), do Steps 2a → 2c in order, then Step 2d **only if `tests_after: true` and this story ended `story_final_status: success`**. Between stories, re-sync the main session's working tree (so the next story sees PRs merged by the previous one):
 
 ```
 git checkout dev && git pull --ff-only
@@ -247,6 +257,42 @@ For each dispatched story, derive these counters for the final summary in Step 3
 - `failed_iteration` = id of the first iteration with `final_status: failed`, or `null`.
 - `failed_stage` = `failed_stage` of that iteration, or `null`.
 
+### Step 2d — Per-story dev-tests (only with `tests`)
+
+Run **only if both**:
+
+- the user passed the `tests` flag (`tests_after: true`), AND
+- this story ended `story_final_status: success` (every iteration green).
+
+For stories that ended `partial`, `failed`, or were `skipped` in Step 1b, skip this step entirely — initialise `tests_report := null` and `tests_status := "—"` for the story record, and move on. (Stories skipped as already-done were presumably tested in their original implementing run; the user can always invoke `/skald:dev-test-story <id>` manually.)
+
+Procedure:
+
+1. Re-sync the working tree so the discovery orchestrator sees this story's freshly merged PRs:
+
+   ```
+   git checkout dev && git pull --ff-only
+   ```
+
+2. Follow `commands/dev-test-story.md` **Steps 2a → 2d** for story `<id>` as the sole target. Reuse the exact subagents, prompts, state machine, and safety caps defined there — do not re-derive them here. Specifically:
+   - Step 2a — dispatch `story-test-orchestrator` and parse ROUTE-BRIEF / BLOCKED-ROUTE / STORY-DISCOVERY-RESULT blocks.
+   - Step 2b — per-route state machine (author → reviewer → fixer → optional prod-PR review → deploy-wait).
+   - Step 2c — build the per-story dev-test coverage report.
+   - Step 2d — derive per-story dev-test counters (`final_status_per_story`, `merged`, `open`, `failed`, `blocked`, `skipped`, `ok_count`).
+
+3. Cache the per-story dev-test coverage report (from dev-test-story Step 2c) on the story record as `tests_report`. Cache the per-story dev-test final status as `tests_status` mapped to a single emoji+label for the multi-story summary table:
+   - `success` + `no_endpoints: true` → `⏭ нет эндпоинтов`
+   - `success` + `no_endpoints: false` → `✅ зелёные`
+   - `partial` → `⚠️ частично`
+   - `failed` → `❌ ошибка`
+   - `blocked` → `🚫 blocked`
+
+4. Skip dev-test-story's own Step 1b (the `iteration.md` eligibility filter): we just merged every iteration of this story and `dev-executor` flips each checkbox to `- [x]` on success, so the story is eligible by construction. Do not re-evaluate.
+
+5. Skip dev-test-story's Step 0 (working tree sanity check): the outer `dev-story` already owns the dev branch and we performed step (1) above.
+
+6. A failure inside the dev-test phase does NOT abort the outer story batch. Record `tests_status` for this story and continue to the next story per the outer loop. The exception is the same global-blocker the outer loop already handles — if `git checkout dev && git pull --ff-only` itself fails, stop the whole batch with the git error.
+
 ## Step 3 — Final output
 
 The output depends on the number of stories actually dispatched (excluding `skipped`).
@@ -255,43 +301,80 @@ The output depends on the number of stories actually dispatched (excluding `skip
 
 Relay the cached per-story report from Step 2b verbatim. Do NOT add a top-level by-story summary — the per-story report is the full answer.
 
+If `tests_after: true` AND `tests_report` is non-null (i.e. Step 2d ran), append a horizontal rule and a level-2 heading `## Dev-тесты` followed by the cached `tests_report` verbatim:
+
+```
+<cached per-story impl report from Step 2b>
+
+---
+
+## Dev-тесты
+
+<cached tests_report from Step 2d, verbatim>
+```
+
+If `tests_after: true` but Step 2d was skipped (story did not end `success`), do not print a dev-tests section — the impl report already explains why the story didn't reach the test phase.
+
 If the only target was skipped via Step 1b done-detection, print one Russian line: «История `<id>` уже завершена — все итерации помечены в `iteration.md`.»
 
 ### Multi-story (target list size > 1, or 0 args, or any mix of dispatched/skipped)
 
 Print first the top-level summary, then per-story sections.
 
+When `tests_after: true`, the summary table includes the extra column **Dev-тесты** (after «Заметки»). When `tests_after: false`, omit that column entirely — do not print empty placeholders.
+
+Top-level summary template (with `tests`):
+
 ```
 # Прогон историй: итог
 
 Всего историй в таргете: <T>. ✅ замёрджено: <S>. ⚠️ частично: <P>. ❌ ошибки: <F>. ⏭ пропущено (готово): <K>.
 
+| История | Статус | Успешно/Всего | Заметки | Dev-тесты |
+| --- | --- | --- | --- | --- |
+| <id> — <title> | ✅ всё замёрджено | <succeeded>/<total> | — | <tests_status or "—"> |
+| <id> — <title> | ⚠️ частично замёрджено | <succeeded>/<total> | итерация <iter> — <stage>, <notes> | — |
+| <id> — <title> | ❌ ошибка | 0/<total> | итерация <iter> — <stage>, <notes> | — |
+| <id> — <title> | ⏭ пропущено (готово) | — | все итерации помечены в `iteration.md` | — |
+```
+
+Without `tests`, drop the `Dev-тесты` column:
+
+```
 | История | Статус | Успешно/Всего | Заметки |
 | --- | --- | --- | --- |
-| <id> — <title> | ✅ всё замёрджено | <succeeded>/<total> | — |
-| <id> — <title> | ⚠️ частично замёрджено | <succeeded>/<total> | итерация <iter> — <stage>, <notes> |
-| <id> — <title> | ❌ ошибка | 0/<total> | итерация <iter> — <stage>, <notes> |
-| <id> — <title> | ⏭ пропущено (готово) | — | все итерации помечены в `iteration.md` |
+…
+```
 
+Then the per-story sections:
+
+```
 ---
 
 ## История <id> — <title>
 
-<cached per-story report verbatim>
+<cached per-story impl report from Step 2b verbatim>
+
+<if tests_after AND tests_report is non-null:>
+---
+
+### Dev-тесты
+
+<cached tests_report from Step 2d verbatim>
+</if>
 
 ## История <id> — <title>
-
-<cached per-story report verbatim>
 
 …
 ```
 
-- Map per-story `story_final_status` to the table:
+- Map per-story `story_final_status` to the «Статус» column:
   - `success` → `✅ всё замёрджено`
   - `partial` → `⚠️ частично замёрджено`
   - `failed` → `❌ ошибка`
+- Map `tests_status` (set in Step 2d) to the «Dev-тесты» column verbatim. For stories where Step 2d was skipped (no `tests`, story not in `success`, or done-detected skip), use `—`.
 - Skipped (done-detected) stories appear with `⏭ пропущено (готово)`. No per-story section is printed for them.
-- Always include the per-story section for every **dispatched** story, even on failure — relay the report cached in Step 2b.
+- Always include the per-story section for every **dispatched** story, even on failure — relay the report cached in Step 2b. Append the cached `tests_report` (Step 2d) under a level-3 `### Dev-тесты` subheading only when it exists.
 - If the target list was empty after Step 1 or every story was done-detected, the short-circuit already printed the right line; do not print this section.
 
 No preamble, no trailing commentary outside the structures above.
