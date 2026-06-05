@@ -1,5 +1,5 @@
 ---
-description: Execute one or more stories from task.md end-to-end. For each iteration runs dev-executor → pr-reviewer (auto-merge) → (fix-executor + pr-reviewer up to 3x) in the main session. Optional `tests` flag chains /skald:dev-test-story for each successfully implemented story before moving to the next one. No nested-subagent dispatching — the per-iteration state machine lives here.
+description: Execute one or more stories from task.md end-to-end. For each iteration runs dev-executor → pr-reviewer (auto-merge) → (fix-executor + pr-reviewer up to 3x) in the main session. Optional `tests` flag chains /skald:dev-api-test-story for each successfully implemented story before moving to the next one. No nested-subagent dispatching — the per-iteration state machine lives here.
 argument-hint: [<story-id>] [+] [tests]
 allowed-tools: Task, Bash, Read, Grep, Glob
 ---
@@ -18,7 +18,7 @@ The command accepts positional arguments in three base forms, optionally followe
 - **1 arg** — `/skald:dev-story <N>` — process **only** story `<N>`. `<N>` must match `^\d+$`.
 - **2 args** — `/skald:dev-story <N> +` — process every story in `task.md` in document order **starting from story `<N>`** (inclusive). `<N>` must match `^\d+$`, the second arg must be literally `+`.
 
-The optional `tests` flag must be the **last** token. When present, after each story finishes with every iteration green, the command immediately runs the `/skald:dev-test-story` per-story pipeline for that story (Step 2d) — then moves on to the next story. Combinations:
+The optional `tests` flag must be the **last** token. When present, after each story finishes with every iteration green and is deployed to the dev contour (Step 2d), the command immediately runs the `/skald:dev-api-test-story` per-story pipeline for that story (Step 2e) — then moves on to the next story. Combinations:
 
 - `/skald:dev-story tests`
 - `/skald:dev-story <N> tests`
@@ -98,7 +98,7 @@ Print the filtered dispatch list (eligible stories only) as a numbered list befo
 
 Run stories **sequentially** and **in the order of the filtered dispatch list from Step 1b** — that list is already in document order (see the Critical ordering rule in Step 1). Do not re-sort by id at this stage. No parallelism — `dev` is shared, `task.md` is shared, each story's merges must be visible to the next story's discovery.
 
-For each target story `<id>` in the filtered dispatch list (document order), do Steps 2a → 2c in order, then Step 2d **only if `tests_after: true` and this story ended `story_final_status: success`**. Between stories, re-sync the main session's working tree (so the next story sees PRs merged by the previous one):
+For each target story `<id>` in the filtered dispatch list (document order), do Steps 2a → 2c in order, then Step 2d (build & deploy to dev) **if this story ended `story_final_status: success`**, then Step 2e **only if `tests_after: true`, the story ended `story_final_status: success`, and the Step 2d deploy succeeded**. Between stories, re-sync the main session's working tree (so the next story sees PRs merged by the previous one):
 
 ```
 git checkout dev && git pull --ff-only
@@ -257,39 +257,75 @@ For each dispatched story, derive these counters for the final summary in Step 3
 - `failed_iteration` = id of the first iteration with `final_status: failed`, or `null`.
 - `failed_stage` = `failed_stage` of that iteration, or `null`.
 
-### Step 2d — Per-story dev-tests (only with `tests`)
+### Step 2d — Build & deploy to the dev contour
 
-Run **only if both**:
+Run **only if** this story ended `story_final_status: success` (every iteration green). For stories that ended `partial`, `failed`, or were `skipped` in Step 1b, skip this step — the dev contour keeps the previously deployed version; initialise `deploy_status := "—"` for the story record. This step runs **regardless of the `tests` flag** — the dev contour must always reflect the latest merged story.
 
-- the user passed the `tests` flag (`tests_after: true`), AND
-- this story ended `story_final_status: success` (every iteration green).
+There is **no CI on GitHub** — build and deploy are driven by scripts in `script/` at the project root:
 
-For stories that ended `partial`, `failed`, or were `skipped` in Step 1b, skip this step entirely — initialise `tests_report := null` and `tests_status := "—"` for the story record, and move on. (Stories skipped as already-done were presumably tested in their original implementing run; the user can always invoke `/skald:dev-test-story <id>` manually.)
-
-Procedure:
-
-1. Re-sync the working tree so the discovery orchestrator sees this story's freshly merged PRs:
+1. Re-sync the working tree so the build includes this story's freshly merged PRs:
 
    ```
    git checkout dev && git pull --ff-only
    ```
 
-2. Follow `commands/dev-test-story.md` **Steps 2a → 2d** for story `<id>` as the sole target. Reuse the exact subagents, prompts, state machine, and safety caps defined there — do not re-derive them here. Specifically:
+   If this fails, stop the whole batch with the git error (same global-blocker rule as elsewhere).
+
+2. Check that both `script/build-push.sh` and `script/pull-up.sh` exist at the project root. If either is missing, this is a hard error — print one Russian line:
+
+   ```
+   Скрипты сборки/деплоя не найдены — ожидаю script/build-push.sh и script/pull-up.sh в корне проекта.
+   ```
+
+   Set `deploy_status := "❌ скрипты не найдены"` for this story, do NOT dispatch any remaining stories, and jump to Step 3 (final output).
+
+3. Build the image and push it to the registry (Bash `timeout` parameter: `1200000` ms — 20 minutes):
+
+   ```
+   ./script/build-push.sh
+   ```
+
+4. Deploy the fresh image to the dev contour (Bash `timeout` parameter: `600000` ms — 10 minutes):
+
+   ```
+   ./script/pull-up.sh dev
+   ```
+
+Outcomes:
+
+- Both scripts exit 0 → `deploy_status := "✅"`. Continue to Step 2e (when `tests_after: true`) or to the next story.
+- Either script exits non-zero or times out → `deploy_status := "❌"`, record the failing script name and the tail of its output on the story record. Skip Step 2e for this story (testing a stale contour is pointless) and stop the whole batch — the next story's deploy would fail the same way. Jump to Step 3.
+
+### Step 2e — Per-story dev-tests (only with `tests`)
+
+Run **only if all three**:
+
+- the user passed the `tests` flag (`tests_after: true`), AND
+- this story ended `story_final_status: success` (every iteration green), AND
+- the Step 2d deploy succeeded (`deploy_status == "✅"`).
+
+For stories that ended `partial`, `failed`, were `skipped` in Step 1b, or whose deploy failed, skip this step entirely — initialise `tests_report := null` and `tests_status := "—"` for the story record, and move on. (Stories skipped as already-done were presumably tested in their original implementing run; the user can always invoke `/skald:dev-api-test-story <id>` manually.)
+
+Procedure:
+
+1. The working tree is already synced and the story is deployed to the dev contour (Step 2d) — no extra git or deploy work is needed here.
+
+2. Follow `commands/dev-api-test-story.md` **Steps 2a → 2d** for story `<id>` as the sole target. Reuse the exact subagents, prompts, state machine, and safety caps defined there — do not re-derive them here. Specifically:
    - Step 2a — dispatch `story-test-orchestrator` and parse ROUTE-BRIEF / BLOCKED-ROUTE / STORY-DISCOVERY-RESULT blocks.
-   - Step 2b — per-route state machine (author → reviewer → fixer → optional prod-PR review → deploy-wait).
+   - Step 2b — per-route state machine (author → reviewer → fixer → optional prod-PR review → build+deploy via `script/`).
    - Step 2c — build the per-story dev-test coverage report.
    - Step 2d — derive per-story dev-test counters (`final_status_per_story`, `merged`, `open`, `failed`, `blocked`, `skipped`, `ok_count`).
 
-3. Cache the per-story dev-test coverage report (from dev-test-story Step 2c) on the story record as `tests_report`. Cache the per-story dev-test final status as `tests_status` mapped to a single emoji+label for the multi-story summary table:
+3. Cache the per-story dev-test coverage report (from dev-api-test-story Step 2c) on the story record as `tests_report`. Cache the per-story dev-test final status as `tests_status` mapped to a single emoji+label for the multi-story summary table:
    - `success` + `no_endpoints: true` → `⏭ нет эндпоинтов`
    - `success` + `no_endpoints: false` → `✅ зелёные`
    - `partial` → `⚠️ частично`
    - `failed` → `❌ ошибка`
    - `blocked` → `🚫 blocked`
 
-4. Skip dev-test-story's own Step 1b (the `iteration.md` eligibility filter): we just merged every iteration of this story and `dev-executor` flips each checkbox to `- [x]` on success, so the story is eligible by construction. Do not re-evaluate.
+4. Skip dev-api-test-story's own Step 1b (the `iteration.md` eligibility filter): we just merged every iteration of this story and `dev-executor` flips each checkbox to `- [x]` on success, so the story is eligible by construction. Do not re-evaluate.
 
-5. Skip dev-test-story's Step 0 (working tree sanity check): the outer `dev-story` already owns the dev branch and we performed step (1) above.
+5. Skip dev-api-test-story's Step 0 (working tree sanity check): the outer `dev-story` already owns the dev branch and the tree was synced in Step 2d.
 
 6. A failure inside the dev-test phase does NOT abort the outer story batch. Record `tests_status` for this story and continue to the next story per the outer loop. The exception is the same global-blocker the outer loop already handles — if `git checkout dev && git pull --ff-only` itself fails, stop the whole batch with the git error.
 
@@ -301,19 +337,23 @@ The output depends on the number of stories actually dispatched (excluding `skip
 
 Relay the cached per-story report from Step 2b verbatim. Do NOT add a top-level by-story summary — the per-story report is the full answer.
 
-If `tests_after: true` AND `tests_report` is non-null (i.e. Step 2d ran), append a horizontal rule and a level-2 heading `## Dev-тесты` followed by the cached `tests_report` verbatim:
+If the story ended `story_final_status: success` (Step 2d ran or was attempted), append one line right after the report: «Деплой на dev: <deploy_status>» — `✅`, `❌` + имя упавшего скрипта, or `❌ скрипты не найдены`.
+
+If `tests_after: true` AND `tests_report` is non-null (i.e. Step 2e ran), append a horizontal rule and a level-2 heading `## Dev-тесты` followed by the cached `tests_report` verbatim:
 
 ```
 <cached per-story impl report from Step 2b>
+
+Деплой на dev: <deploy_status>
 
 ---
 
 ## Dev-тесты
 
-<cached tests_report from Step 2d, verbatim>
+<cached tests_report from Step 2e, verbatim>
 ```
 
-If `tests_after: true` but Step 2d was skipped (story did not end `success`), do not print a dev-tests section — the impl report already explains why the story didn't reach the test phase.
+If `tests_after: true` but Step 2e was skipped (story did not end `success`, or the deploy failed), do not print a dev-tests section — the impl report plus the deploy line already explain why the story didn't reach the test phase.
 
 If the only target was skipped via Step 1b done-detection, print one Russian line: «История `<id>` уже завершена — все итерации помечены в `iteration.md`.»
 
@@ -360,7 +400,7 @@ Then the per-story sections:
 
 ### Dev-тесты
 
-<cached tests_report from Step 2d verbatim>
+<cached tests_report from Step 2e verbatim>
 </if>
 
 ## История <id> — <title>
@@ -372,9 +412,11 @@ Then the per-story sections:
   - `success` → `✅ всё замёрджено`
   - `partial` → `⚠️ частично замёрджено`
   - `failed` → `❌ ошибка`
-- Map `tests_status` (set in Step 2d) to the «Dev-тесты» column verbatim. For stories where Step 2d was skipped (no `tests`, story not in `success`, or done-detected skip), use `—`.
+- Map `tests_status` (set in Step 2e) to the «Dev-тесты» column verbatim. For stories where Step 2e was skipped (no `tests`, story not in `success`, deploy failed, or done-detected skip), use `—`.
+- If a story's Step 2d deploy failed (`deploy_status` starts with `❌`), append «деплой dev: <deploy_status>» to its «Заметки» cell, and print one line right after the table: «Остановка батча: деплой на dev упал после истории `<id>` — оставшиеся истории не запускались.»
+- Stories never dispatched because the batch stopped on a deploy failure appear in the table with `⏭ не запущено` and «остановка после деплой-ошибки истории `<id>`» in «Заметки».
 - Skipped (done-detected) stories appear with `⏭ пропущено (готово)`. No per-story section is printed for them.
-- Always include the per-story section for every **dispatched** story, even on failure — relay the report cached in Step 2b. Append the cached `tests_report` (Step 2d) under a level-3 `### Dev-тесты` subheading only when it exists.
+- Always include the per-story section for every **dispatched** story, even on failure — relay the report cached in Step 2b, followed by the deploy line «Деплой на dev: <deploy_status>» when the story ended `success`. Append the cached `tests_report` (Step 2e) under a level-3 `### Dev-тесты` subheading only when it exists.
 - If the target list was empty after Step 1 or every story was done-detected, the short-circuit already printed the right line; do not print this section.
 
 No preamble, no trailing commentary outside the structures above.

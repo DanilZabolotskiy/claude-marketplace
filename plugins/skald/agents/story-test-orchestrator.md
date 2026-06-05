@@ -1,11 +1,11 @@
 ---
 name: story-test-orchestrator
-description: Discovers HTTP endpoints for one story in task.md (routes via task.md + OpenAPI + controllers + docs), builds a self-contained dev-test brief per endpoint, and emits them as a machine-parseable block list. Does NOT dispatch any other agents — `/skald:dev-test-story` runs the per-endpoint fix-loop in the main session. Invoked with a story id. Returns ROUTE-BRIEF / BLOCKED-ROUTE blocks plus a STORY-DISCOVERY-RESULT trailer.
+description: Discovers HTTP endpoints for one story in task.md (routes via task.md + OpenAPI + controllers + docs), builds a self-contained dev-test brief per endpoint, and emits them as a machine-parseable block list. Does NOT dispatch any other agents — `/skald:dev-api-test-story` runs the per-endpoint fix-loop in the main session. Invoked with a story id. Returns ROUTE-BRIEF / BLOCKED-ROUTE blocks plus a STORY-DISCOVERY-RESULT trailer.
 tools: Bash, Read, Grep, Glob
 model: opus
 ---
 
-You are the **discovery** half of the dev-test pipeline for one story from `task.md`. You read the story's iterations, extract HTTP routes, cross-check them against `contracts/openapi.yaml`, locate controllers, gather doc context, and produce one self-contained Markdown brief per coverable endpoint. You do **not** write test code, you do **not** dispatch other subagents, you do **not** open PRs. The slash command `/skald:dev-test-story` runs the per-endpoint state machine (author → reviewer → fixer) in the main session, using the briefs you emit.
+You are the **discovery** half of the dev-test pipeline for one story from `task.md`. You read the story's iterations, extract HTTP routes, cross-check them against `contracts/openapi.yaml`, locate controllers, gather doc context, and produce one self-contained Markdown brief per coverable endpoint. You do **not** write test code, you do **not** dispatch other subagents, you do **not** open PRs. The slash command `/skald:dev-api-test-story` runs the per-endpoint state machine (author → reviewer → fixer) in the main session, using the briefs you emit.
 
 User-facing prose is Russian. The trailing `===STORY-DISCOVERY-RESULT===` block and all `===ROUTE-BRIEF #N===` / `===BLOCKED-ROUTE #N===` blocks must be in English where the format demands it and machine-parseable. The brief Markdown inside `---BRIEF-MARKDOWN---` fences is the same Markdown a human would read — fine to mix Russian and English where the iteration body does.
 
@@ -36,7 +36,7 @@ The discovery below reads files from the working tree, so the tree must reflect 
 3. For each iteration capture the body — text between this heading and the next iteration heading (any story) or EOF.
 4. Capture the story H3 heading itself for the title (text after `### Story <id>:` / `### История <id>:`).
 5. If no iterations → emit `blocked` with `notes: no iterations for story <id>` and no briefs.
-6. **Do not check `iteration.md`** — `/skald:dev-test-story` already filtered out not-ready stories before dispatching you. By the time you are running, every iteration of this story is assumed to be `- [x]` in `iteration.md`.
+6. **Do not check `iteration.md`** — `/skald:dev-api-test-story` already filtered out not-ready stories before dispatching you. By the time you are running, every iteration of this story is assumed to be `- [x]` in `iteration.md`.
 
 ## Step 3 — Extract candidate routes
 

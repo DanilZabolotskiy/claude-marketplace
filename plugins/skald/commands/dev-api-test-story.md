@@ -1,5 +1,5 @@
 ---
-description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md. Для каждой истории сначала запускается story-test-orchestrator-подагент (чистый контекст) — он делает только discovery: ищет HTTP-маршруты, кросс-чекает OpenAPI/контроллеры/доки и возвращает по одному dev-test brief'у на эндпоинт. Затем сама команда (в главной сессии) на каждый эндпоинт гоняет fix-loop dev-test-author → pr-reviewer (auto-merge) → dev-test-fixer → автор-ретрай / deploy-wait, до 3 фикс-попыток. Истории, которые ещё не завершены в iteration.md, пропускаются.
+description: Сгенерировать black-box тесты для одной истории или для батча историй из task.md. Для каждой истории сначала запускается story-test-orchestrator-подагент (чистый контекст) — он делает только discovery: ищет HTTP-маршруты, кросс-чекает OpenAPI/контроллеры/доки и возвращает по одному dev-test brief'у на эндпоинт. Затем сама команда (в главной сессии) на каждый эндпоинт гоняет fix-loop dev-test-author → pr-reviewer (auto-merge) → dev-test-fixer → автор-ретрай / сборка+деплой dev-контура скриптами из script/, до 3 фикс-попыток. Истории, которые ещё не завершены в iteration.md, пропускаются.
 argument-hint: [<story-id>] [+]
 allowed-tools: Task, Read, Bash, Grep, Glob
 ---
@@ -17,14 +17,14 @@ Reply to the user in Russian. Do not enter plan mode — execute.
 
 The command accepts zero, one, or two positional arguments:
 
-- **0 args** — `/skald:dev-test-story` — process **every** story in `task.md` in document order.
-- **1 arg** — `/skald:dev-test-story <N>` — process **only** story `<N>`. `<N>` must match `^\d+$`.
-- **2 args** — `/skald:dev-test-story <N> +` — process every story in `task.md` in document order **starting from story `<N>`** (inclusive). `<N>` must match `^\d+$`, the second arg must be literally `+`.
+- **0 args** — `/skald:dev-api-test-story` — process **every** story in `task.md` in document order.
+- **1 arg** — `/skald:dev-api-test-story <N>` — process **only** story `<N>`. `<N>` must match `^\d+$`.
+- **2 args** — `/skald:dev-api-test-story <N> +` — process every story in `task.md` in document order **starting from story `<N>`** (inclusive). `<N>` must match `^\d+$`, the second arg must be literally `+`.
 
 If the arguments don't fit any of the three forms, print one Russian line and stop:
 
 ```
-Использование: /skald:dev-test-story [<story-id>] [+]
+Использование: /skald:dev-api-test-story [<story-id>] [+]
 ```
 
 ## Step 0 — Sanity check working tree
@@ -60,7 +60,7 @@ Each per-story orchestrator will also do its own pull when it starts, so it pick
 4. Build the **target list** from this ordered set of stories-with-iterations. In every form the list is a contiguous slice of the document-ordered list from Step 2 — never a numeric-range filter:
    - **0 args:** all of them, in document order.
    - **1 arg `<N>`:** the single entry for `<N>`. If not present, stop with «История `<N>` не найдена в `task.md` или не имеет итераций.»
-   - **2 args `<N> +`:** the **document-order** suffix starting from the position of `<N>` in the Step-2 list, inclusive. Find the index of `<N>` and take that element plus everything after it in document order — do NOT take «every story whose id ≥ N». In the `[7, 5, 10]` example, `/skald:dev-test-story 7 +` dispatches `[7, 5, 10]`, and `/skald:dev-test-story 5 +` dispatches `[5, 10]`. If `<N>` not present, stop with the same line as above.
+   - **2 args `<N> +`:** the **document-order** suffix starting from the position of `<N>` in the Step-2 list, inclusive. Find the index of `<N>` and take that element plus everything after it in document order — do NOT take «every story whose id ≥ N». In the `[7, 5, 10]` example, `/skald:dev-api-test-story 7 +` dispatches `[7, 5, 10]`, and `/skald:dev-api-test-story 5 +` dispatches `[5, 10]`. If `<N>` not present, stop with the same line as above.
 5. If the target list is empty (0-arg mode and no stories with iterations exist) → «В `task.md` нет историй с итерациями — запускать нечего.» stop.
 6. Print the target list to the user as a numbered list (`1. <id> — <title>`) before starting — the numbering is the dispatch index (1, 2, 3…), the `<id>` is the story id, and the rows must appear in document order. No confirmation prompt — Auto mode.
 
@@ -208,18 +208,18 @@ loop:
        notes := "prod-fix PR #" + prod_pr_number + " not approved (verdict: " + review.verdict + ")"
        break
     if review.verdict in {approve, comment} AND review.merged == true:
-       state := DEPLOY_WAIT
+       state := BUILD_DEPLOY
     else:
        # approved but merge blocked
        final_status := blocked
        notes := "prod-fix PR #" + prod_pr_number + " approved but auto-merge blocked: " + review.notes
        break
 
-  elif state == DEPLOY_WAIT:
-    deploy_ok := wait for latest CI run on dev (see "Deploy wait" below)
+  elif state == BUILD_DEPLOY:
+    deploy_ok := build & deploy to dev via scripts (see "Build & deploy" below)
     if not deploy_ok:
        final_status := failed
-       notes := "dev deploy failed/timed out after prod-fix #" + prod_pr_number
+       notes := "dev build/deploy failed after prod-fix #" + prod_pr_number
        break
     author_attempt += 1
     state := AUTHOR
@@ -227,19 +227,38 @@ loop:
 
 Record the per-route outcome and move to the next route.
 
-#### Deploy wait (after merging a prod-fix PR)
+#### Build & deploy (after merging a prod-fix PR)
 
-After `gh pr merge` of a `fix/<slug>-prod` PR succeeds (the `pr-reviewer` did this with auto-merge), the dev contour must rebuild and redeploy before re-running the test. From the main session:
+After `gh pr merge` of a `fix/<slug>-prod` PR succeeds (the `pr-reviewer` did this with auto-merge), the dev contour must be rebuilt and redeployed before re-running the test. There is **no CI on GitHub** — build and deploy are driven by scripts in `script/` at the project root. From the main session:
 
-```
-run_id=$(gh run list --branch dev --limit 1 --json databaseId -q '.[0].databaseId')
-gh run watch "$run_id" --exit-status
-```
+1. Sync the working tree so the build includes the just-merged fix:
 
-- Exit 0 → deploy succeeded, proceed to AUTHOR retry.
-- Non-zero exit → deploy failed → `final_status: failed` for this route.
-- If `gh run watch` does not return within 20 minutes (use the Bash tool's `timeout` parameter set to `1200000` ms) → kill it and treat as failure.
-- If `gh run list` returns no run (no CI workflow on `dev` push), proceed to AUTHOR retry immediately and add `notes: no CI workflow detected on dev — relying on out-of-band deploy`.
+   ```
+   git checkout dev && git pull --ff-only
+   ```
+
+2. Check that both `script/build-push.sh` and `script/pull-up.sh` exist at the project root. If either is missing, this is a hard error — print one Russian line:
+
+   ```
+   Скрипты сборки/деплоя не найдены — ожидаю script/build-push.sh и script/pull-up.sh в корне проекта.
+   ```
+
+   Mark this route `failed` with `notes: deploy scripts missing`, mark every remaining ROUTE-BRIEF of this story as `blocked` with `notes: skipped — deploy scripts missing`, do NOT dispatch any remaining stories, and jump to Step 3 (final output).
+
+3. Build the image and push it to the registry (Bash `timeout` parameter: `1200000` ms — 20 minutes):
+
+   ```
+   ./script/build-push.sh
+   ```
+
+4. Deploy the fresh image to the dev contour (Bash `timeout` parameter: `600000` ms — 10 minutes):
+
+   ```
+   ./script/pull-up.sh dev
+   ```
+
+- Both scripts exit 0 → deploy succeeded (`deploy_ok: true`), proceed to AUTHOR retry.
+- Either script exits non-zero or times out → deploy failed (`deploy_ok: false`) → `final_status: failed` for this route; put the failing script name and the tail of its output into `notes`.
 
 #### Story-level abort
 
@@ -247,7 +266,7 @@ If `dev-test-author` returns `blocked` with `notes` containing `dirty working tr
 
 #### Safety cap
 
-For each route, total subagent dispatches are bounded: 1 initial author + up to 3 fixer + up to 3 author retries + up to 4 reviewer (one per code state) + up to 1 prod-PR reviewer + up to 1 deploy-wait. The `attempts_used` counter caps fixer entries at 3; once exhausted, the route ends as `failed`.
+For each route, total subagent dispatches are bounded: 1 initial author + up to 3 fixer + up to 3 author retries + up to 4 reviewer (one per code state) + up to 1 prod-PR reviewer + up to 1 build+deploy run. The `attempts_used` counter caps fixer entries at 3; once exhausted, the route ends as `failed`.
 
 Routes within a story are processed **sequentially** — never parallelise.
 
