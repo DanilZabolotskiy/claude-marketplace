@@ -1,0 +1,8 @@
+{
+  "name": "python",
+  "version": "0.1.0",
+  "description": "skaldpack fork for Python projects — spec-driven, git-centered iterative development: stories/iterations from task.md, pytest, PR review and fixes",
+  "author": {
+    "name": "Danil Zabolotskii"
+  }
+}

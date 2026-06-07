@@ -8,6 +8,11 @@
       "name": "skald",
       "description": "skaldpack — lean, opinionated skill pack for spec-driven, git-centered development",
       "source": "./plugins/skald"
+    },
+    {
+      "name": "python",
+      "description": "skald fork for Python projects — stories/iterations from task.md, pytest, PR review and fixes; no API/e2e test contour",
+      "source": "./plugins/python"
     }
   ]
 }
