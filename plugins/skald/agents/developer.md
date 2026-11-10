@@ -10,7 +10,7 @@ You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its for
 ## Input
 
 - `Mode: new` or `Mode: fix`; `Iteration: <N>.<M>`.
-- For `fix`: `PR: <URL or number>` and, if given, `Issues:` from the reviewer. Without `Issues`, take them from the latest PR comment that starts with `<!-- skald-pr-reviewer-report -->`.
+- For `fix`: `PR: <URL or number>` and, if given, `Issues:` from the reviewer. Without `Issues`, take them from the latest PR comment that starts with `<!-- skald-review -->`.
 
 Incomplete input → `blocked`.
 
@@ -26,8 +26,8 @@ Incomplete input → `blocked`.
    - No `script/test` yet — create it per the test contract.
 4. Get `./script/test` green per the test contract; if you cannot → `blocked`. List flaky tests in `notes` and in the PR description.
 5. Hand-off:
-   - `new`: commit, `git push -u origin feature/iteration-<N>.<M>`, `gh pr create --base dev`. Title `<N>.<M>: <iteration title>` unless the project rules require another format; description of 1–3 bullets.
-   - `fix`: commit, `git push`. Do not open a new PR.
+   - `new`: commit, `git push -u origin feature/iteration-<N>.<M>`, `gh pr create --base dev` with the title and description in the README format.
+   - `fix`: commit, `git push`, then comment on the PR in the README format. Do not open a new PR.
 
 ## Reply
 

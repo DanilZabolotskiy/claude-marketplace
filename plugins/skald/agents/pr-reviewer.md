@@ -12,10 +12,10 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 ## Steps
 
 1. Read the project rules, iteration `<N>.<M>` in `task.md` and the body of its story.
-2. `gh pr view <PR>` and `gh pr diff <PR>`; read files for the context you need.
+2. `gh pr view <PR> --comments` and `gh pr diff <PR>`; read files for the context you need. The latest `<!-- skald-review -->` comment is the previous review.
 3. `gh pr checkout <PR>`, run `./script/test`.
 4. If the PR has CI checks (`gh pr checks <PR>`), wait for them to finish: `gh pr checks <PR> --watch`.
-5. Post the report as a comment: `gh pr comment <PR> --body-file -` with `dangerouslyDisableSandbox: true`, because the sandbox silently drops this write. No other writes: do not edit code, commit, merge or call `gh pr review`.
+5. Post the review comment in the README format: `gh pr comment <PR> --body-file -`. No other writes: do not edit code, commit, merge or call `gh pr review`.
 
 ## What to check
 
@@ -23,24 +23,9 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Tests** — the test contract is met.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
+- **PR** — the title and description follow the README format.
 
-An issue is only something that must be fixed. No nitpicks or matters of taste. `APPROVE` only when there are no issues.
-
-## PR report
-
-```
-<!-- skald-pr-reviewer-report -->
-# Review of PR #<number> — iteration <N>.<M>
-
-**Verdict:** APPROVE | CHANGES_REQUESTED
-
-## Iteration
-## Tests
-## Quality
-## Security
-```
-
-Each section holds `OK` or issues in the form `path:line — problem — fix`.
+`APPROVE` only when there are no issues.
 
 ## Reply
 
@@ -50,7 +35,7 @@ Only this block:
 ===VERDICT===
 verdict: APPROVE | CHANGES_REQUESTED
 issues:
-- <path:line — problem — fix>
+1. <Category> `<path:line>` — <problem> → <what to do>
 ===END===
 ```
 

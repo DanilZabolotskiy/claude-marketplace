@@ -56,6 +56,70 @@ Orchestration runs in the main session, inside the commands. Agents never call o
 - The planner creates the lines; the developer ticks `[x]` in its iteration's PR.
 - An iteration is done when its line is `[x]`. A story is done when all its iterations are done.
 
+## PR
+
+Title — Conventional Commits, unless the project rules set another format: `<type>(<scope>): <summary>`.
+- `type`: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`; a breaking change adds `!` before the colon.
+- `scope`: a module of the project; optional.
+- Summary: imperative, lowercase, up to 72 characters, about the result. No iteration number: it is in the description and the branch name.
+- Plan PR: `chore(plan): plan story <N>`.
+
+Description:
+
+```markdown
+Iteration <N>.<M> — <iteration title> (story <N>)
+
+## Changes
+- <1–5 bullets on behavior, not on files>
+
+## Decisions
+- <non-obvious decisions>
+
+## Tests
+- <test type: what is covered>
+
+## Notes
+- <flaky tests, known limitations>
+```
+
+- `Decisions` and `Notes` only when there is something to say; otherwise omit them.
+- Do not restate the task or write "This PR…". `script/test` is green by definition.
+
+After a fix round the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); 2 — fixed (<sha>)`.
+
+## Review comment
+
+Changes requested:
+
+```markdown
+<!-- skald-review -->
+## ❌ Changes requested — iteration <N>.<M>, review <k>/4
+
+1. **<Category>** `<path:line>` — <problem>. → <what to do>.
+
+**Previous review:** <per issue number: fixed or still open>
+**Checks:** `script/test` ✅|❌ · CI ✅|❌ <failed check>|none
+<details><summary><check> output</summary>
+
+<failures only>
+</details>
+```
+
+Approved:
+
+```markdown
+<!-- skald-review -->
+## ✅ Approved — iteration <N>.<M>, review <k>/4
+
+- Iteration: all of "What we do" and "Definition of done" are done.
+- Tests: <new tests, briefly> · `script/test` ✅ · CI ✅|none
+```
+
+- Categories: `Iteration`, `Bug`, `Tests`, `Security`, `Rules`.
+- Only blocking issues: no nitpicks, matters of taste or praise.
+- `<k>`: earlier `<!-- skald-review -->` comments on the PR plus one. At most 4: the first review and 3 fix rounds.
+- `Previous review` only from review 2; `<details>` only when a check failed.
+
 ## Test contract
 
 - The project root has an executable `script/test`: no arguments, non-interactive, builds the project and runs all tests. Exit code 0 only if everything passed. The working tree stays clean.
@@ -73,6 +137,7 @@ Orchestration runs in the main session, inside the commands. Agents never call o
 - Everything written to the repository or GitHub is English: iterations, `iteration.md`, code, commits, PRs, review comments. Only chat replies are Russian.
 - The base branch is `dev`; the iteration branch is `feature/iteration-<N>.<M>`.
 - Changes reach `dev` only through a PR merged by the orchestrator. Never commit or push to `dev` directly.
+- `gh pr comment` runs with `dangerouslyDisableSandbox: true`: the sandbox silently drops this write.
 - A dirty working tree or a git error means stop. No `stash`, `reset`, force-push, or bypassing hooks or signing (`--no-verify`).
 - Touch only your own iteration or story.
 - A `RESULT` or `VERDICT` block uses its keys verbatim and comes last in the reply.
