@@ -11,7 +11,7 @@ If `dev` is protected, require PRs and checks but not approvals: the reviewer po
 | Command | What it does |
 | --- | --- |
 | `/skald:plan [<N>]` | Plans iterations for story N, or one by one for every story without iterations. Edits stay in the working tree. |
-| `/skald:dev <N.M>` | One iteration: `developer` → `pr-reviewer` → up to 3 fix rounds → merge. |
+| `/skald:dev <N.M>` | One iteration: `acceptance-tester` for a critical story → `developer` → `pr-reviewer` → up to 3 fix rounds → merge. |
 | `/skald:dev-story <N> [<N> …]` | Every unfinished iteration of each story in order, then the story gate. |
 | `/skald:dev-all` | Every unfinished story in `task.md` order until none are left or a run stops. A story without iterations is planned first; the plan is merged through a PR. |
 | `/skald:review <N.M> <PR>` | Manual PR review, no merge. |
@@ -19,7 +19,8 @@ If `dev` is protected, require PRs and checks but not approvals: the reviewer po
 
 ## Agents
 
-- `iteration-planner` — writes one story's iterations to `task.md` and their lines to `iteration.md`.
+- `iteration-planner` — writes one story's iterations to `task.md` and their lines to `iteration.md`; marks a critical story.
+- `acceptance-tester` — for a critical story, writes an iteration's acceptance tests before its code.
 - `developer` — mode `new`: implements an iteration and opens a PR into `dev`; mode `fix`: addresses review issues on that PR.
 - `pr-reviewer` — reviews the PR, runs the tests itself, posts its report on the PR, returns a verdict. Never merges.
 
@@ -43,6 +44,7 @@ Orchestration runs in the main session, inside the commands. Agents never call o
 
 - A story runs from its heading to the next heading of level `###` or higher. An iteration runs to the next heading of level `####` or higher.
 - Stories and iterations go in file order, not by number.
+- A story whose body has the line `- **Acceptance tests:** first` is critical. The planner adds the line when the project rules define critical stories and the story fits; without such a rule, never.
 
 `iteration.md`:
 
@@ -129,7 +131,18 @@ Approved:
 - The reviewer runs `script/test` on the PR branch itself. If the PR has CI checks (`gh pr checks`), it waits for them to finish. Red tests or CI → `CHANGES_REQUESTED` with the error output.
 - New behavior is covered by tests in the same iteration. Tests are never deleted, skipped or weakened to get green. A flaky test is reported, not worked around.
 - A story ends with a gate: after its last iteration is merged, `script/test` passes on a fresh `dev`.
-- Long commands (`script/test`, `gh pr checks --watch`) run with a Bash timeout of 600000 ms.
+- Tests must catch broken behavior. The reviewer runs `script/mutants origin/dev` if the project has it; otherwise it breaks 2–3 key behaviors of the iteration by hand, runs the tests and reverts. A breakage no test catches is a `Tests` issue. Iterations without code skip this.
+- `script/mutants <base-ref>` is optional: non-interactive, mutates only the code changed since `<base-ref>`, exit code 0 only if the tests catch every mutant. The working tree stays clean.
+- Long commands (`script/test`, `script/mutants`, `gh pr checks --watch`) run with a Bash timeout of 600000 ms.
+
+## Acceptance tests
+
+For each iteration of a critical story, before any code:
+- `acceptance-tester` writes tests of every item of the iteration's `Definition of done` and of the behavior the specs fix for it. Black box: only through interfaces a user or another component sees (API, CLI, protocol, a module's public API). Names come from the specs; a missing name the tester chooses and lists in the commit body.
+- It commits only the tests as `test(acceptance): iteration <N>.<M>` on `feature/iteration-<N>.<M>` and pushes without a PR. The new tests fail because the code is missing; everything else stays green.
+- An iteration with nothing to test, such as docs only → `skipped`, and it runs as usual.
+- The developer builds on that branch. It changes an acceptance test only to fix a defect in the test, and lists each change with its reason under `Decisions` in the PR.
+- The reviewer checks every change to those tests (`git diff <acceptance commit> HEAD -- <its files>`). A change that is unlisted or weakens a check is a `Tests` issue.
 
 ## Agent rules
 
