@@ -97,7 +97,7 @@ Changes requested:
 <!-- skald-review -->
 ## ❌ Changes requested — iteration <N>.<M>, review <k>/4
 
-1. **<Category>** `<path:line>` — <problem>. → <what to do>.
+1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
 
 **Previous review:** <per issue number: fixed or still open>
 **Checks:** `script/test` ✅|❌ · CI ✅|❌ <failed check>|none
@@ -119,6 +119,7 @@ Approved:
 
 - Categories: `Iteration`, `Bug`, `Tests`, `Security`, `Rules`.
 - Only blocking issues: no nitpicks, matters of taste or praise.
+- One issue per problem, listing every place it occurs. The developer fixes exactly the listed places.
 - `<k>`: earlier `<!-- skald-review -->` comments on the PR plus one. At most 4: the first review and 3 fix rounds.
 - `Previous review` only from review 2; `<details>` only when a check failed.
 

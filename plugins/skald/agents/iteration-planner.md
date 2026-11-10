@@ -24,6 +24,7 @@ Input: `Story: <N>`.
 
 - 1 to 10, numbered from `<N>.1`.
 - Each is an atomic task that can be implemented and reviewed on its own. Dependencies first, integration last.
+- An iteration that specifies or changes security rules (keys, trust, access, revocation) covers one topic; split larger ones.
 - Short and concrete, no filler: drop any phrase that can go without losing meaning. The implementer must still get enough to know what to do and what result is expected.
 - Only the task and the result. No code, signatures, DB schemas, JSON/YAML, field lists or file-by-file plans. Do not invent names; identifiers from the story are fine.
 - New behavior gets its own tests bullet in `What we do` and the test type in `Definition of done`.

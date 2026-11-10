@@ -25,6 +25,7 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
 - **PR** — the title and description follow the README format.
+- **Completeness** — for each issue, search the whole PR and the code or docs it touches for every place with the same problem, and list them all in that one issue. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
 
 `APPROVE` only when there are no issues.
 
@@ -36,7 +37,7 @@ Only this block:
 ===VERDICT===
 verdict: APPROVE | CHANGES_REQUESTED
 issues:
-1. <Category> `<path:line>` — <problem> → <what to do>
+1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
 ===END===
 ```
 
