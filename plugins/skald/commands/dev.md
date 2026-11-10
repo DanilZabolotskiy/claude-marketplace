@@ -1,5 +1,5 @@
 ---
-description: One iteration N.M — developer, pr-reviewer, up to 3 fix rounds, merge into dev
+description: One iteration N.M — acceptance tests for a critical story, developer, pr-reviewer, up to 3 fix rounds, merge into dev
 argument-hint: "<N.M>"
 allowed-tools: Agent, Bash, Read
 ---
@@ -8,6 +8,7 @@ Run the cycle for iteration `$ARGUMENTS` yourself, in the main session. Formats 
 
 Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. Iteration already ticked `[x]` in `iteration.md` → say it is done and stop.
 
+0. **Acceptance tests.** Only for a critical story (its body has `- **Acceptance tests:** first`), and only if `origin` has no `feature/iteration-<N.M>` yet. Run agent `skald:acceptance-tester` with the prompt `Iteration: <N.M>`. `status` is `ok` or `skipped` → step 1; otherwise stop.
 1. **Develop.** Run agent `skald:developer` with the prompt:
    ```
    Mode: new
@@ -31,4 +32,4 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    `status` is not `ok` → stop. Otherwise go to step 2.
 4. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
 
-**Summary.** Success: one line with the iteration, the PR and the number of fix rounds. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues from the latest `VERDICT`.
+**Summary.** Success: one line with the iteration, the PR, the number of fix rounds and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues from the latest `VERDICT`.
