@@ -4,6 +4,8 @@ Claude Code plugin: stories in `task.md` → iterations → PRs into `dev` → r
 
 Requires `git`, an authenticated `gh`, a `dev` branch on `origin` and `script/test` (see "Test contract").
 
+If `dev` is protected, require PRs and checks but not approvals: the reviewer posts a comment, because GitHub does not let you approve your own PR.
+
 ## Commands
 
 | Command | What it does |
@@ -11,7 +13,7 @@ Requires `git`, an authenticated `gh`, a `dev` branch on `origin` and `script/te
 | `/skald:plan [<N>]` | Plans iterations for story N, or one by one for every story without iterations. Edits stay in the working tree. |
 | `/skald:dev <N.M>` | One iteration: `developer` → `pr-reviewer` → up to 3 fix rounds → merge. |
 | `/skald:dev-story <N> [<N> …]` | Every unfinished iteration of each story in order, then the story gate. |
-| `/skald:dev-all` | Every unfinished story in `task.md` order until none are left or a run stops. A story without iterations is planned first. |
+| `/skald:dev-all` | Every unfinished story in `task.md` order until none are left or a run stops. A story without iterations is planned first; the plan is merged through a PR. |
 | `/skald:review <N.M> <PR>` | Manual PR review, no merge. |
 | `/skald:fix <N.M> <PR>` | Manual PR fix from the latest review. |
 
@@ -70,6 +72,7 @@ Orchestration runs in the main session, inside the commands. Agents never call o
 - Before starting, read the project rules: `AGENTS.md`, `CLAUDE.md`, `rules.md` in the root, whichever exist. Style, tests and the format of commits and PR titles follow them.
 - Everything written to the repository or GitHub is English: iterations, `iteration.md`, code, commits, PRs, review comments. Only chat replies are Russian.
 - The base branch is `dev`; the iteration branch is `feature/iteration-<N>.<M>`.
+- Changes reach `dev` only through a PR merged by the orchestrator. Never commit or push to `dev` directly.
 - A dirty working tree or a git error means stop. No `stash`, `reset`, force-push, or bypassing hooks or signing (`--no-verify`).
 - Touch only your own iteration or story.
 - A `RESULT` or `VERDICT` block uses its keys verbatim and comes last in the reply.
