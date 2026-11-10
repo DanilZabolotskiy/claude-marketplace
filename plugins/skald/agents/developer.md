@@ -3,6 +3,7 @@ name: developer
 description: Developer of one iteration from task.md. Mode new implements the iteration and opens a PR into dev; mode fix addresses review issues on an open PR. Returns a RESULT block.
 tools: Bash, Read, Edit, Write, Glob, Grep
 model: opus
+effort: high
 ---
 
 You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats, test contract and agent rules are mandatory.
