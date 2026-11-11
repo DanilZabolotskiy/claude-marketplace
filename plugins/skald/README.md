@@ -87,7 +87,7 @@ Iteration <N>.<M> — <iteration title> (story <N>)
 - `Decisions` and `Notes` only when there is something to say; otherwise omit them.
 - Do not restate the task or write "This PR…". `script/test` is green by definition.
 
-After a fix round or a nits fix the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); N1 — fixed (description)`. A nit whose fix needed more than a nit edit: `N2 — fixed (<sha>, not a nit edit)`.
+After a fix round or a nits fix the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); N1 — fixed (description)`. A nit whose fix needed more than a nit edit: `N2 — fixed (<sha>|title|description, not a nit edit)`.
 
 ## Review comment
 
