@@ -11,7 +11,7 @@ You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its for
 ## Input
 
 - `Mode: new` or `Mode: fix`; `Iteration: <N>.<M>`.
-- For `fix`: `PR: <URL or number>` and, if given, `Issues:` and `Nits:` from the reviewer. With neither, take the issues and nits from the latest PR comment that starts with `<!-- skald-review -->`.
+- For `fix`: `PR: <URL or number>` and, if given, `Issues:` and `Nits:`. With neither, take the issues and nits from the latest PR comment that starts with `<!-- skald-review -->`.
 
 Incomplete input → `blocked`.
 
@@ -23,7 +23,7 @@ Incomplete input → `blocked`.
 2. Read the project rules, iteration `<N>.<M>` in `task.md` and the body of its story. No such iteration → `blocked`.
 3. Work:
    - `new`: do only what the iteration describes. Tick the iteration `[x]` in `iteration.md`; if its line is missing, add it in the documented format. Acceptance tests on the branch must pass; change them only as the README section "Acceptance tests" allows.
-   - `fix`: address every issue and nit with the smallest change, nothing on the side. A nit gets a nit edit as the README section "Review comment" defines it; if it needs more, fix it as needed and mark it in the PR comment. You disagree with an issue or nit → `blocked` with the reason.
+   - `fix`: address every issue and nit with the smallest change that meets the README "Agent rules", nothing on the side. A nit gets a nit edit as the README section "Review comment" defines it; if it needs more, fix it as needed and mark it in the PR comment. You disagree with an issue or nit → `blocked` with the reason.
    - No `script/test` yet — create it per the test contract.
 4. Get `./script/test` green per the test contract; if you cannot → `blocked`. List flaky tests in `notes` and in the PR description.
 5. Hand-off:
