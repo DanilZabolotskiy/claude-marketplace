@@ -11,7 +11,7 @@ You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its for
 ## Input
 
 - `Mode: new` or `Mode: fix`; `Iteration: <N>.<M>`.
-- For `fix`: `PR: <URL or number>` and, if given, `Issues:` and `Nits:` from the reviewer. With neither, take the issues and nits from the latest PR comment that starts with `<!-- skald-review -->`.
+- For `fix`: `PR: <URL or number>` and, if given, `Issues:` and `Nits:`. With neither, take the issues and nits from the latest PR comment that starts with `<!-- skald-review -->`.
 
 Incomplete input → `blocked`.
 

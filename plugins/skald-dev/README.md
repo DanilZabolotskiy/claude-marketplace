@@ -87,7 +87,7 @@ Iteration <N>.<M> — <iteration title> (story <N>)
 - `Decisions` and `Notes` only when there is something to say; otherwise omit them.
 - Do not restate the task or write "This PR…". `script/test` is green by definition.
 
-After a fix round or a nits fix the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); N1 — fixed (description)`. A nit whose fix needed more than a nit edit: `N2 — fixed (<sha>|title|description, not a nit edit)`.
+After a fix round or a nits fix the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); N1 — fixed (description)`; gaps from the orchestrator's check: `G1 — fixed (<sha>)`. A nit whose fix needed more than a nit edit: `N2 — fixed (<sha>|title|description, not a nit edit)`.
 
 ## Review comment
 
@@ -125,7 +125,7 @@ N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what t
 
 - Categories: `Iteration`, `Bug`, `Tests`, `Security`, `Rules`.
 - No matters of taste or praise.
-- One issue or nit per rule broken, listing every place that breaks it. The developer fixes exactly the listed places and what a rule, check or step the fix adds governs ("Agent rules").
+- One issue or nit per rule broken, listing every place that breaks it. The developer fixes exactly the listed places and meets the "Agent rules" for what the fix adds.
 - A nit, from review 2 only: a problem whose fix is a nit edit — it rewords, reformats or removes repeated prose in the files the nit cites (docs, code comments no tool reads, the PR title or description) and changes no fact, requirement or behavior. Anything else is an issue. Nits do not block. With changes requested, the fix round fixes them too; after an approval, `/skald-dev:dev` has them fixed and checks the edit itself instead of another review.
 - `<k>`: earlier `<!-- skald-review -->` comments on the PR plus one. At most 4: the first review and 3 fix rounds.
 - `Previous review` only from review 2; `Nits` only when there are some; `<details>` only when a check failed.

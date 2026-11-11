@@ -31,7 +31,7 @@ Argument not of the form `<N>.<M>` → show usage `/skald-dev:dev <N.M>` and sto
    Nits:
    <nits from the latest VERDICT, verbatim; omit the field if there are none>
    ```
-   `status` is not `ok` → stop. Check the fix once: `git fetch`, `git diff <noted head> origin/feature/iteration-<N.M>` and the PR title and description, and search for what each rule, check or step it adds governs (README, "Agent rules"). Gaps → run the developer once more with them as `Issues:` numbered `G1`, `G2`…; `status` is not `ok` → stop. Then step 2.
+   `status` is not `ok` → stop. Check the fix once: `git fetch`, `git diff <noted head> origin/feature/iteration-<N.M>` and the PR title and description, and check what it adds against the README "Agent rules". Gaps → run the developer once more with them as `Issues:` numbered `G1`, `G2`…; `status` is not `ok` → stop. Then step 2.
 4. **Nits.** Note the PR head, title and description (`gh pr view <pr> --json headRefOid,title,body`) and whether that head has CI checks (`gh pr checks <pr>`), then run `skald-dev:developer`:
    ```
    Mode: fix
@@ -45,4 +45,4 @@ Argument not of the form `<N>.<M>` → show usage `/skald-dev:dev <N.M>` and sto
    - Anything else is a fix round. 3 fix rounds were done before it → stop and name the unreviewed changes in the Summary: commits, title, description; otherwise check it as in step 3, then step 2.
 5. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
 
-**Summary.** Success: one line with the iteration, the PR, the number of fix rounds, whether nits were fixed and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues and nits from the latest `VERDICT`.
+**Summary.** Success: one line with the iteration, the PR, the number of fix rounds, whether nits were fixed and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues and nits from the latest `VERDICT`; on a stop in step 3's gap run, the open gaps and the unreviewed commits instead.
