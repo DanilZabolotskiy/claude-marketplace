@@ -125,7 +125,7 @@ N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what t
 
 - Categories: `Iteration`, `Bug`, `Tests`, `Security`, `Rules`.
 - No matters of taste or praise.
-- One issue or nit per rule broken, listing every place that breaks it. The developer fixes exactly the listed places.
+- One issue or nit per rule broken, listing every place that breaks it. The developer fixes exactly the listed places and what a rule, check or step the fix adds governs ("Agent rules").
 - A nit, from review 2 only: a problem whose fix is a nit edit — it rewords, reformats or removes repeated prose in the files the nit cites (docs, code comments no tool reads, the PR title or description) and changes no fact, requirement or behavior. Anything else is an issue. Nits do not block. With changes requested, the fix round fixes them too; after an approval, `/skald-dev:dev` has them fixed and checks the edit itself instead of another review.
 - `<k>`: earlier `<!-- skald-review -->` comments on the PR plus one. At most 4: the first review and 3 fix rounds.
 - `Previous review` only from review 2; `Nits` only when there are some; `<details>` only when a check failed.
@@ -161,5 +161,5 @@ For each iteration of a critical story, before any code:
 - `gh pr comment` runs with `dangerouslyDisableSandbox: true`: the sandbox silently drops this write.
 - A dirty working tree or a git error means stop. No `stash`, `reset`, force-push, or bypassing hooks or signing (`--no-verify`).
 - Touch only your own iteration or story.
-- A change that adds a rule, a check or a step for someone reaches everything it governs: apply the rule wherever it holds (search for those places); for a step, say who takes it, how its input and output reach the developer and the reviewer, and how the Definition of done checks it. A reviewer who proposes such a change names the same chain.
+- A rule or check that a change adds applies wherever it holds in your iteration or story. A step the owner or an agent takes is added with who takes it, how its input and output reach the developer and the reviewer, and what checks it: a test, the review or a Definition of done.
 - A `RESULT` or `VERDICT` block uses its keys verbatim and comes last in the reply.
