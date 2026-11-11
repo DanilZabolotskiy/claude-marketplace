@@ -14,4 +14,4 @@ Iteration: <N.M>
 PR: <PR>
 ```
 
-It takes the issues from the latest review report on the PR. Show its outcome. Re-review with `/skald:review`.
+It takes the issues and nits from the latest review report on the PR. Show its outcome. Re-review with `/skald:review`.
