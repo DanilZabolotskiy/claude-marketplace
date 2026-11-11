@@ -1,6 +1,6 @@
 ---
 name: pr-reviewer
-description: Independent review of one iteration's PR from task.md. Runs script/test and a mutation check itself and waits for CI, posts its report as a PR comment, returns a verdict APPROVE or CHANGES_REQUESTED with issues and text-only nits. Never commits code or merges.
+description: Independent review of one iteration's PR from task.md. Runs script/test and a mutation check itself and waits for CI, posts its report as a PR comment, returns a verdict APPROVE or CHANGES_REQUESTED with issues and nits. Never commits code or merges.
 tools: Bash, Read, Grep, Glob
 model: opus
 effort: xhigh

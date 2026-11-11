@@ -28,7 +28,7 @@ Incomplete input → `blocked`.
 4. Get `./script/test` green per the test contract; if you cannot → `blocked`. List flaky tests in `notes` and in the PR description.
 5. Hand-off:
    - `new`: commit, `git push -u origin feature/iteration-<N>.<M>`, `gh pr create --base dev` with the title and description in the README format.
-   - `fix`: commit, `git push`, then comment on the PR in the README format. Do not open a new PR. Nits fixed only in the PR description need no commit.
+   - `fix`: commit, `git push`, then comment on the PR in the README format. Do not open a new PR. Nits fixed only in the PR title or description need no commit.
 
 ## Reply
 

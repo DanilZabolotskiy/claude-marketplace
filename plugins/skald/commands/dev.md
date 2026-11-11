@@ -32,7 +32,7 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    <nits from the latest VERDICT, verbatim; omit the field if there are none>
    ```
    `status` is not `ok` → stop. Otherwise go to step 2.
-4. **Nits.** Note the PR head (`gh pr view <pr> --json headRefOid`), then run `skald:developer`:
+4. **Nits.** Note the PR head, title and description (`gh pr view <pr> --json headRefOid,title,body`) and whether that head has CI checks (`gh pr checks <pr>`), then run `skald:developer`:
    ```
    Mode: fix
    Iteration: <N.M>
@@ -40,8 +40,8 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    Nits:
    <nits from the latest VERDICT, verbatim>
    ```
-   `status` is not `ok` → stop. Then `git fetch` and check `git diff <noted head> origin/feature/iteration-<N.M>`:
-   - No commits, or only nit edits (README, "Review comment") in the files the nits cite: if commits were pushed and the latest review reported CI checks, wait until the new head has checks and they finish (`gh pr checks <pr> --watch`). All green or no commits → step 5; a red check → as below.
+   `status` is not `ok` → stop. Then `git fetch` and compare with the noted state: `git diff <noted head> origin/feature/iteration-<N.M>`, and the PR title and description.
+   - Every change is a nit edit (README, "Review comment") in a file, the title or the description that the nits cite: no new commits, or the noted head had no CI checks → step 5. Otherwise wait for the new head's checks (`gh pr checks <pr> --watch`); none appear within 10 minutes, or all green → step 5; a red check → as below.
    - Anything else is a fix round. 3 fix rounds were done before it → stop and name the unreviewed commits in the Summary; otherwise step 2.
 5. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
 
