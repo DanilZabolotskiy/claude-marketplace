@@ -13,4 +13,4 @@ Iteration: <N.M>
 PR: <PR>
 ```
 
-Show the verdict and issues. The full report is in the PR comment. Merging is manual.
+Show the verdict, issues and nits. The full report is in the PR comment. Merging is manual.

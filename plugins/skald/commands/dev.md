@@ -1,5 +1,5 @@
 ---
-description: One iteration N.M — acceptance tests for a critical story, developer, pr-reviewer, up to 3 fix rounds, merge into dev
+description: One iteration N.M — acceptance tests for a critical story, developer, pr-reviewer, up to 3 fix rounds, nits, merge into dev
 argument-hint: "<N.M>"
 allowed-tools: Agent, Bash, Read
 ---
@@ -20,7 +20,7 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    Iteration: <N.M>
    PR: <pr>
    ```
-   No `VERDICT` block → stop; the reason is the reviewer's reply. `APPROVE` → step 4, `CHANGES_REQUESTED` → step 3.
+   No `VERDICT` block → stop; the reason is the reviewer's reply. `APPROVE` with no nits → step 5, `APPROVE` with nits → step 4, `CHANGES_REQUESTED` → step 3.
 3. **Fix.** 3 fix rounds already done → stop. Otherwise run `skald:developer`:
    ```
    Mode: fix
@@ -28,8 +28,21 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    PR: <pr>
    Issues:
    <issues from the latest VERDICT, verbatim>
+   Nits:
+   <nits from the latest VERDICT, verbatim; omit the field if there are none>
    ```
    `status` is not `ok` → stop. Otherwise go to step 2.
-4. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
+4. **Nits.** Note the PR head, title and description (`gh pr view <pr> --json headRefOid,title,body`) and whether that head has CI checks (`gh pr checks <pr>`), then run `skald:developer`:
+   ```
+   Mode: fix
+   Iteration: <N.M>
+   PR: <pr>
+   Nits:
+   <nits from the latest VERDICT, verbatim>
+   ```
+   `status` is not `ok` → stop. Then `git fetch` and compare with the noted state: `git diff <noted head> origin/feature/iteration-<N.M>`, and the PR title and description.
+   - Every change is a nit edit (README, "Review comment") in a file, the title or the description that the nits cite: no new commits, or the noted head had no CI checks → step 5. Otherwise wait for the new head's checks (`gh pr checks <pr> --watch`); none appear within 10 minutes, or all green → step 5; a red check → as below.
+   - Anything else is a fix round. 3 fix rounds were done before it → stop and name the unreviewed changes in the Summary: commits, title, description; otherwise step 2.
+5. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
 
-**Summary.** Success: one line with the iteration, the PR, the number of fix rounds and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues from the latest `VERDICT`.
+**Summary.** Success: one line with the iteration, the PR, the number of fix rounds, whether nits were fixed and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues and nits from the latest `VERDICT`.

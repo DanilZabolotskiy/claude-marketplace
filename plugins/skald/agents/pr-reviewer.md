@@ -1,6 +1,6 @@
 ---
 name: pr-reviewer
-description: Independent review of one iteration's PR from task.md. Runs script/test and a mutation check itself and waits for CI, posts its report as a PR comment, returns a verdict APPROVE or CHANGES_REQUESTED. Never commits code or merges.
+description: Independent review of one iteration's PR from task.md. Runs script/test and a mutation check itself and waits for CI, posts its report as a PR comment, returns a verdict APPROVE or CHANGES_REQUESTED with issues and nits. Never commits code or merges.
 tools: Bash, Read, Grep, Glob
 model: opus
 effort: xhigh
@@ -25,9 +25,10 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
 - **PR** — the title and description follow the README format.
-- **Completeness** — for each issue, search the whole PR and the code or docs it touches for every place with the same problem, and list them all in that one issue. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
+- **Completeness** — state each issue and nit as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue or nit. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
+- **Nits** — from review 2, a problem that is a nit as the README section "Review comment" defines it goes under `nits`; when unsure, it is an issue. In review 1 every problem is an issue.
 
-`APPROVE` only when there are no issues.
+`APPROVE` only when there are no issues; nits do not block.
 
 ## Reply
 
@@ -38,7 +39,9 @@ Only this block:
 verdict: APPROVE | CHANGES_REQUESTED
 issues:
 1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
+nits:
+N1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
 ===END===
 ```
 
-With `APPROVE`, `issues` is empty. If you could not review (`gh` error, no such iteration, dirty tree), reply with one line giving the reason instead of the block.
+With `APPROVE`, `issues` is empty. `nits` is empty in review 1. If you could not review (`gh` error, no such iteration, dirty tree), reply with one line giving the reason instead of the block.
