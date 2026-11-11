@@ -31,7 +31,7 @@ Argument not of the form `<N>.<M>` → show usage `/skald-dev:dev <N.M>` and sto
    Nits:
    <nits from the latest VERDICT, verbatim; omit the field if there are none>
    ```
-   `status` is not `ok` → stop. Otherwise go to step 2.
+   `status` is not `ok` → stop. Otherwise read the fix's diff: a new rule, check or step that misses what it governs (README, "Agent rules") → run the developer again with those gaps as issues, in the same round. Then go to step 2.
 4. **Nits.** Note the PR head, title and description (`gh pr view <pr> --json headRefOid,title,body`) and whether that head has CI checks (`gh pr checks <pr>`), then run `skald-dev:developer`:
    ```
    Mode: fix

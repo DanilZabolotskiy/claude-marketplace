@@ -161,4 +161,5 @@ For each iteration of a critical story, before any code:
 - `gh pr comment` runs with `dangerouslyDisableSandbox: true`: the sandbox silently drops this write.
 - A dirty working tree or a git error means stop. No `stash`, `reset`, force-push, or bypassing hooks or signing (`--no-verify`).
 - Touch only your own iteration or story.
+- A change that adds a rule, a check or a step for someone reaches everything it governs: apply the rule wherever it holds (search for those places); for a step, say who takes it, how its input and output reach the developer and the reviewer, and how the Definition of done checks it. A reviewer who proposes such a change names the same chain.
 - A `RESULT` or `VERDICT` block uses its keys verbatim and comes last in the reply.
