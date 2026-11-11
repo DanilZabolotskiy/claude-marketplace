@@ -1,4 +1,4 @@
-# skald
+# skald-dev
 
 Claude Code plugin: stories in `task.md` → iterations → PRs into `dev` → review → merge, with test gates. Language-agnostic, built around `git` and GitHub PRs.
 
@@ -10,12 +10,12 @@ If `dev` is protected, require PRs and checks but not approvals: the reviewer po
 
 | Command | What it does |
 | --- | --- |
-| `/skald:plan [<N>]` | Plans iterations for story N, or one by one for every story without iterations. Edits stay in the working tree. |
-| `/skald:dev <N.M>` | One iteration: `acceptance-tester` for a critical story → `developer` → `pr-reviewer` → up to 3 fix rounds → nits → merge. |
-| `/skald:dev-story <N> [<N> …]` | Every unfinished iteration of each story in order, then the story gate. |
-| `/skald:dev-all` | Every unfinished story in `task.md` order until none are left or a run stops. A story without iterations is planned first; the plan is merged through a PR. |
-| `/skald:review <N.M> <PR>` | Manual PR review, no merge. |
-| `/skald:fix <N.M> <PR>` | Manual PR fix from the latest review. |
+| `/skald-dev:plan [<N>]` | Plans iterations for story N, or one by one for every story without iterations. Edits stay in the working tree. |
+| `/skald-dev:dev <N.M>` | One iteration: `acceptance-tester` for a critical story → `developer` → `pr-reviewer` → up to 3 fix rounds → nits → merge. |
+| `/skald-dev:dev-story <N> [<N> …]` | Every unfinished iteration of each story in order, then the story gate. |
+| `/skald-dev:dev-all` | Every unfinished story in `task.md` order until none are left or a run stops. A story without iterations is planned first; the plan is merged through a PR. |
+| `/skald-dev:review <N.M> <PR>` | Manual PR review, no merge. |
+| `/skald-dev:fix <N.M> <PR>` | Manual PR fix from the latest review. |
 
 ## Agents
 
@@ -126,7 +126,7 @@ N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what t
 - Categories: `Iteration`, `Bug`, `Tests`, `Security`, `Rules`.
 - No matters of taste or praise.
 - One issue or nit per rule broken, listing every place that breaks it. The developer fixes exactly the listed places.
-- A nit, from review 2 only: a problem whose fix is a nit edit — it rewords, reformats or removes repeated prose in the files the nit cites (docs, code comments no tool reads, the PR title or description) and changes no fact, requirement or behavior. Anything else is an issue. Nits do not block. With changes requested, the fix round fixes them too; after an approval, `/skald:dev` has them fixed and checks the edit itself instead of another review.
+- A nit, from review 2 only: a problem whose fix is a nit edit — it rewords, reformats or removes repeated prose in the files the nit cites (docs, code comments no tool reads, the PR title or description) and changes no fact, requirement or behavior. Anything else is an issue. Nits do not block. With changes requested, the fix round fixes them too; after an approval, `/skald-dev:dev` has them fixed and checks the edit itself instead of another review.
 - `<k>`: earlier `<!-- skald-review -->` comments on the PR plus one. At most 4: the first review and 3 fix rounds.
 - `Previous review` only from review 2; `Nits` only when there are some; `<details>` only when a check failed.
 

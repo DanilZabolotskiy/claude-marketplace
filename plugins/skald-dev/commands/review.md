@@ -4,9 +4,9 @@ argument-hint: "<N.M> <PR>"
 allowed-tools: Agent
 ---
 
-`$ARGUMENTS` is `<N.M> <PR>`, where PR is a number or URL; otherwise show usage `/skald:review <N.M> <PR>` and stop. Reply to the user in Russian.
+`$ARGUMENTS` is `<N.M> <PR>`, where PR is a number or URL; otherwise show usage `/skald-dev:review <N.M> <PR>` and stop. Reply to the user in Russian.
 
-Run agent `skald:pr-reviewer` with the prompt:
+Run agent `skald-dev:pr-reviewer` with the prompt:
 
 ```
 Iteration: <N.M>
