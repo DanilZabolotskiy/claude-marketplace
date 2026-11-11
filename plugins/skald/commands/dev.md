@@ -40,7 +40,9 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    Nits:
    <nits from the latest VERDICT, verbatim>
    ```
-   `status` is not `ok` → stop. Check that the commits since the noted head change only text: docs, comments, the PR description (`git diff <noted head> origin/feature/iteration-<N.M>` after `git fetch`). Anything else → it counts as a fix round: 3 fix rounds already done → stop, otherwise step 2. Wait for CI: `gh pr checks <pr> --watch`; a failed check → rerun it once with `gh run rerun <run id> --failed`; still red → stop.
+   `status` is not `ok` → stop. Then `git fetch` and check `git diff <noted head> origin/feature/iteration-<N.M>`:
+   - No commits, or only nit edits (README, "Review comment") in the files the nits cite: if commits were pushed and the latest review reported CI checks, wait until the new head has checks and they finish (`gh pr checks <pr> --watch`). All green or no commits → step 5; a red check → as below.
+   - Anything else is a fix round. 3 fix rounds were done before it → stop and name the unreviewed commits in the Summary; otherwise step 2.
 5. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
 
 **Summary.** Success: one line with the iteration, the PR, the number of fix rounds, whether nits were fixed and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues and nits from the latest `VERDICT`.

@@ -87,7 +87,7 @@ Iteration <N>.<M> — <iteration title> (story <N>)
 - `Decisions` and `Notes` only when there is something to say; otherwise omit them.
 - Do not restate the task or write "This PR…". `script/test` is green by definition.
 
-After a fix round the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); 2 — fixed (<sha>)`. After nits: `Nits from review <k>: 1 — fixed (<sha>); 2 — fixed (description)`.
+After a fix round or a nits fix the developer comments on the PR: `Fixes for review <k>: 1 — fixed (<sha>); N1 — fixed (description)`. A nit whose fix needed more than a nit edit: `N2 — fixed (<sha>, not a nit edit)`.
 
 ## Review comment
 
@@ -100,9 +100,9 @@ Changes requested:
 1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
 
 **Nits:**
-1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
+N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
 
-**Previous review:** <per issue number: fixed or still open>
+**Previous review:** <per issue and nit number: fixed or still open>
 **Checks:** `script/test` ✅|❌ · CI ✅|❌ <failed check>|none
 <details><summary><check> output</summary>
 
@@ -119,14 +119,14 @@ Approved:
 - Iteration: all of "What we do" and "Definition of done" are done.
 - Tests: <new tests, briefly> · `script/test` ✅ · CI ✅|none
 
-**Nits** — text only, fixed before merge without another review:
-1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
+**Nits:**
+N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
 ```
 
 - Categories: `Iteration`, `Bug`, `Tests`, `Security`, `Rules`.
 - No matters of taste or praise.
-- One issue per rule broken, listing every place that breaks it. The developer fixes exactly the listed places.
-- Nits: from review 2, problems whose fix changes only text (docs, comments, the PR description). They do not block. With changes requested, the fix round fixes them too; with an approval, they are fixed before the merge without another review.
+- One issue or nit per rule broken, listing every place that breaks it. The developer fixes exactly the listed places.
+- A nit, from review 2 only: a problem whose fix is a nit edit — it rewords, reformats or removes repeated prose in the files the nit cites (docs, code comments no tool reads, the PR title or description) and changes no fact, requirement or behavior. Anything else is an issue. Nits do not block. With changes requested, the fix round fixes them too; after an approval, `/skald:dev` has them fixed and checks the edit itself instead of another review.
 - `<k>`: earlier `<!-- skald-review -->` comments on the PR plus one. At most 4: the first review and 3 fix rounds.
 - `Previous review` only from review 2; `Nits` only when there are some; `<details>` only when a check failed.
 

@@ -25,8 +25,8 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
 - **PR** — the title and description follow the README format.
-- **Completeness** — state each issue as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
-- **Nits** — from review 2, a problem whose fix changes only text (docs, comments, the PR description) is a nit, not an issue. Defects, security risks, missing or weak tests and unfinished scope stay issues. In review 1 every problem is an issue.
+- **Completeness** — state each issue and nit as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue or nit. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
+- **Nits** — from review 2, a problem that is a nit as the README section "Review comment" defines it goes under `nits`; when unsure, it is an issue. In review 1 every problem is an issue.
 
 `APPROVE` only when there are no issues; nits do not block.
 
@@ -40,7 +40,7 @@ verdict: APPROVE | CHANGES_REQUESTED
 issues:
 1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
 nits:
-1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
+N1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
 ===END===
 ```
 
