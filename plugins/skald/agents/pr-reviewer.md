@@ -24,7 +24,7 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Tests** — the test contract is met; the tests catch broken behavior; for a critical story, the acceptance tests are kept as the README section "Acceptance tests" requires.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
-- **PR** — the title and description follow the README format. The title, description, branch name and committed content follow "Public text"; a breach is an issue. A branch commit message that names a story or iteration number is neither an issue nor a nit, because its author cannot change it: list it under `notes` in the `VERDICT`, never in the PR comment.
+- **PR** — the title and description follow the README format. The title, description and committed content follow "Public text"; a breach is an issue. A branch name or branch commit message that names a story or iteration number is neither an issue nor a nit, because fix mode cannot change it: list it under `notes` in the `VERDICT`, never in the PR comment.
 - **Completeness** — state each issue and nit as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue or nit. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
 - **Nits** — from review 2, a problem that is a nit as the README section "Review comment" defines it goes under `nits`; when unsure, it is an issue. In review 1 every problem is an issue.
 
@@ -42,8 +42,8 @@ issues:
 nits:
 N1. <Category> `<path:line>`[, `<path:line>` …] — <problem> → <what to do>
 notes:
-- <commit sha> — <its subject>: names a story or iteration number
+- <branch name | commit sha — its subject>: names a story or iteration number
 ===END===
 ```
 
-With `APPROVE`, `issues` is empty. `nits` is empty in review 1. `notes` holds only branch commit messages that name a story or iteration number; otherwise it is empty. If you could not review (`gh` error, no such iteration, dirty tree), reply with one line giving the reason instead of the block.
+With `APPROVE`, `issues` is empty. `nits` is empty in review 1. `notes` holds only a branch name or branch commit messages that name a story or iteration number; otherwise it is empty. If you could not review (`gh` error, no such iteration, dirty tree), reply with one line giving the reason instead of the block.

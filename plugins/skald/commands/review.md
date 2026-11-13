@@ -13,4 +13,6 @@ Iteration: <N.M>
 PR: <PR>
 ```
 
-Show the verdict, issues and nits. The full report is in the PR comment. Merging is manual.
+Show the verdict, issues, nits and notes. The full report is in the PR comment. Merging is manual.
+
+With notes: squash with a commit body free of those story and iteration numbers, built as in `/skald:dev` step 5.
