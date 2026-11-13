@@ -8,11 +8,19 @@ Run the cycle for iteration `$ARGUMENTS` yourself, in the main session. Formats 
 
 Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. Iteration already ticked `[x]` in `iteration.md` → say it is done and stop.
 
-0. **Acceptance tests.** Only for a critical story (its body has `- **Acceptance tests:** first`), and only if `origin` has no `feature/<slug>` (README, "Public text") yet. Run agent `skald:acceptance-tester` with the prompt `Iteration: <N.M>`. `status` is `ok` or `skipped` → step 1; otherwise stop.
+**Branch.** Once, before step 0 (README, "Public text"): the iteration or story title names a story or iteration number → stop and report it. `<branch>` is `feature/<slug>` of the iteration. Empty slug → stop with the reason. The slug occurs more than once among every iteration's slugs → stop, naming the iterations that share it.
+
+0. **Acceptance tests.** Only for a critical story (its body has `- **Acceptance tests:** first`), and only if `origin` has no `<branch>` yet (`git ls-remote --heads origin <branch>`). Run agent `skald:acceptance-tester` with the prompt:
+   ```
+   Iteration: <N.M>
+   Branch: <branch>
+   ```
+   `status` is `ok` or `skipped` → step 1; otherwise stop.
 1. **Develop.** Run agent `skald:developer` with the prompt:
    ```
    Mode: new
    Iteration: <N.M>
+   Branch: <branch>
    ```
    Take `status`, `pr`, `notes` from `RESULT`. `status` is not `ok` → stop.
 2. **Review.** Run `skald:pr-reviewer`:
@@ -40,9 +48,9 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    Nits:
    <nits from the latest VERDICT, verbatim>
    ```
-   `status` is not `ok` → stop. Then `git fetch` and compare with the noted state: `git diff <noted head> origin/feature/<slug>`, and the PR title and description.
+   `status` is not `ok` → stop. Then `git fetch`, `gh pr view <pr> --json headRefOid,title,body` again, and compare with the noted state: `git diff <noted head> <new head>`, and the PR title and description.
    - Every change is a nit edit (README, "Review comment") in a file, the title or the description that the nits cite: no new commits, or the noted head had no CI checks → step 5. Otherwise wait for the new head's checks (`gh pr checks <pr> --watch`); none appear within 10 minutes, or all green → step 5; a red check → as below.
    - Anything else is a fix round. 3 fix rounds were done before it → stop and name the unreviewed changes in the Summary: commits, title, description; otherwise step 2.
-5. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.
+5. **Merge.** `git fetch`, `<head>` from `gh pr view <pr> --json headRefOid`. The commit body is the branch's non-merge commit messages: `git log --reverse --no-merges --format='* %B' origin/dev..<head>`. One names a story or iteration number → stop. Otherwise merge with that body, without `--admin`: `git log --reverse --no-merges --format='* %B' origin/dev..<head> | gh pr merge <pr> --squash --delete-branch --match-head-commit <head> --body-file -`. Then `git checkout dev && git pull --ff-only`. Error → stop.
 
 **Summary.** Success: one line with the iteration, the PR, the number of fix rounds, whether nits were fixed and, for a critical story, the acceptance tests status. Stop: the iteration, the step, the PR link if any, the reason and the unresolved issues and nits from the latest `VERDICT`.

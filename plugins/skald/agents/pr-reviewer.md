@@ -24,7 +24,7 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Tests** — the test contract is met; the tests catch broken behavior; for a critical story, the acceptance tests are kept as the README section "Acceptance tests" requires.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
-- **PR** — the title and description follow the README format and "Public text".
+- **PR** — the title and description follow the README format. The title, description, branch name, the branch's commit messages and the committed content follow "Public text"; a branch name or commit message that names a story or iteration number is an issue.
 - **Completeness** — state each issue and nit as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue or nit. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
 - **Nits** — from review 2, a problem that is a nit as the README section "Review comment" defines it goes under `nits`; when unsure, it is an issue. In review 1 every problem is an issue.
 

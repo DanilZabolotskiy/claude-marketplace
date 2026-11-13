@@ -154,11 +154,26 @@ For each iteration of a critical story, before any code:
 
 ## Public text
 
-- Commit messages, branch names, PR titles, descriptions and comments name no story or iteration number. Only the orchestrator's reports to the user may.
-- An iteration or a story is named by its title.
-- Iteration branch: `feature/<slug>` of the iteration title in its `task.md` heading. Plan branch: `plan/<slug>` of the story title in its `task.md` heading.
-- `<slug>`: the title in lower case, apostrophes dropped, every run of characters other than ASCII letters and digits replaced by one `-`, no `-` at either end. Over 50 characters → cut after the last whole word that fits in 50; a first word over 50 is cut at 50.
-- Every step that names a branch derives it this way.
+- Public text names no story or iteration number: commit messages, branch names, PR titles, descriptions and comments, and committed code, test names, test file names and docs. Private files (`task.md`, `iteration.md`), agent replies to the orchestrator and the orchestrator's reports to the user may.
+- An iteration or a story is named by its title: the `<title>` of `#### Iteration <N>.<M>: <title>` or `### Story <N>: <title>` in `task.md`, never the whole heading.
+- A story or iteration title that names a story or iteration number is not used: the planner reports it to the user, `/skald:dev` and `/skald:dev-all` stop. Nothing renames a story.
+
+Branch names:
+
+- The orchestrator derives a name once and passes it to agents as `Branch: <name>`; agents use it as given.
+- Iteration `<N>.<M>`: `feature/<slug>`; plan of story `<N>`: `plan/<slug>`. `<slug>` is the output of this command:
+
+  ```sh
+  <titles> | LC_ALL=C sed -e "s/'//g" -e 's/’//g' | LC_ALL=C tr 'A-Z' 'a-z' | LC_ALL=C sed -E -e 's/[^a-z0-9]+/-/g' -e 's/^-//' -e 's/-$//' -e '/^.{51}/s/^(.{1,50})-.*$/\1/' | cut -c1-50
+  ```
+
+  `<titles>`:
+  - iteration `<N>.<M>`: `sed -n 's/^#### Iteration <N>\.<M>: //p' task.md`;
+  - story `<N>`: `sed -n 's/^### Story <N>: //p' task.md`;
+  - every iteration, one slug per line: `sed -n 's/^#### Iteration [^:]*: //p' task.md`.
+- The command drops `'` and `’`, lowers the case, turns each run of characters other than ASCII letters and digits into one `-` and trims `-` at both ends. A slug over 50 characters is cut at its last `-` that leaves at most 50, or at 50 when there is none.
+- An empty slug means the title has no ASCII letter or digit: the orchestrator stops, an agent replies `blocked`, with that reason.
+- An iteration's slug is unique among the iterations in `task.md`.
 
 ## Agent rules
 
