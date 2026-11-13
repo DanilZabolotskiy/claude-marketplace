@@ -79,6 +79,7 @@ Iteration <N>.<M> — <iteration title> (story <N>)
 
 ## Tests
 - <test type: what is covered>
+- Breakages caught: <code broken by hand> → <test that failed>; …
 
 ## Notes
 - <flaky tests, known limitations>
@@ -133,13 +134,17 @@ N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what t
 ## Test contract
 
 - The project root has an executable `script/test`: no arguments, non-interactive, builds the project and runs all tests. Exit code 0 only if everything passed. The working tree stays clean.
+- The changed-parts run is optional: `script/test` limited to the tests of what changed since a base ref, otherwise under the same contract. A project that has it documents how to start it, e.g. an environment variable of `script/test` that takes the base ref. The base ref is `origin/dev`.
 - The plugin knows no language and has no build or test commands. What to test and what infrastructure is needed is up to the project.
 - No `script/test` yet — the developer creates it in the current iteration from the project's stack. The reviewer checks that it is a real test run, not a stub.
-- The developer opens a PR only when `script/test` is green.
-- The reviewer runs `script/test` on the PR branch itself. If the PR has CI checks (`gh pr checks`), it waits for them to finish. Red tests or CI → `CHANGES_REQUESTED` with the error output.
+- The full `script/test`: the developer opens the PR only when it is green; CI, where the project has it, runs it on every PR and after every merge into `dev`.
+- Fix round: the developer runs the changed-parts run if the project has it and the tests of what the fix touches; the full `script/test` only when the fix changes `script/test`, the CI configuration or the changed-parts selection. CI covers the rest.
+- Review: the reviewer runs the changed-parts run; the full `script/test` if the project has none, the PR has no CI checks (`gh pr checks`) or it changes `script/test`, the CI configuration or the changed-parts selection. It waits for the CI checks to finish; `APPROVE` needs every check on the PR's head green. Red tests or CI → `CHANGES_REQUESTED` with the error output.
 - New behavior is covered by tests in the same iteration. Tests are never deleted, skipped or weakened to get green. A flaky test is reported, not worked around.
 - A story ends with a gate: after its last iteration is merged, `script/test` passes on a fresh `dev`.
-- Tests must catch broken behavior. The reviewer runs `script/mutants origin/dev` if the project has it; otherwise it breaks 2–3 key behaviors of the iteration by hand, runs the tests and reverts. A breakage no test catches is a `Tests` issue. Iterations without code skip this.
+- Tests must catch broken behavior: a breakage no test catches means a test is missing. Iterations without code skip this.
+- The developer, before it opens or updates the PR: for every behavior the iteration adds or the fix changes (each `Definition of done` item, each check, each refusal), breaks the code that implements it by hand, runs the tests, sees one fail and reverts. Above all what a mutation tool does not mutate: queries inside strings, transactions, configuration calls, output the user sees, a check in one of several code paths. None fails → it adds a test that does. It also runs `script/mutants origin/dev` if the project has it. The PR's `Tests` lists the breakages checked.
+- The reviewer runs `script/mutants origin/dev` if the project has it, and in any case breaks 2–3 key behaviors of the iteration by hand, picked on its own, not from the PR's `Tests`; it runs the tests and reverts. A breakage no test catches is a `Tests` issue.
 - `script/mutants <base-ref>` is optional: non-interactive, mutates only the code changed since `<base-ref>`, exit code 0 only if the tests catch every mutant. The working tree stays clean.
 - Long commands (`script/test`, `script/mutants`, `gh pr checks --watch`) run with a Bash timeout of 600000 ms.
 
