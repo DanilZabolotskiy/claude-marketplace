@@ -14,8 +14,8 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 
 1. Read the project rules, iteration `<N>.<M>` in `task.md` and the body of its story.
 2. `gh pr view <PR> --comments` and `gh pr diff <PR>`; read files for the context you need. The latest `<!-- skald-review -->` comment is the previous review.
-3. `gh pr checkout <PR>`, run `./script/test`, then the mutation check from the test contract. Hand-made breakages are local and temporary: revert them with `git checkout -- <files>`; the tree is clean afterwards.
-4. If the PR has CI checks (`gh pr checks <PR>`), wait for them to finish: `gh pr checks <PR> --watch`.
+3. `gh pr checkout <PR>`, run the tests the test contract gives the reviewer: the changed-parts run; the full `./script/test` if the project has none, the PR has no CI checks (`gh pr checks <PR>`) or it changes `script/test`, the CI configuration or the changed-parts selection. Then the mutation check from the test contract: `script/mutants origin/dev` if the project has it, and your own hand-made breakages, not those in the PR's `Tests`. Hand-made breakages are local and temporary: revert them with `git checkout -- <files>`; the tree is clean afterwards.
+4. If the PR has CI checks, wait for them to finish: `gh pr checks <PR> --watch`. Every check on the PR's head must be green.
 5. Post the review comment in the README format: `gh pr comment <PR> --body-file -`. No other writes: apart from the reverted breakages of step 3, do not edit code, commit, merge or call `gh pr review`.
 
 ## What to check
