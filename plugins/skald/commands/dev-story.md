@@ -1,7 +1,7 @@
 ---
 description: Stories N… — every unfinished iteration in order, then the story gate (script/test on dev)
 argument-hint: "<N> [<N> …]"
-allowed-tools: Agent, Bash, Read, Skill
+allowed-tools: Agent, Bash, Read, Edit, Skill
 ---
 
 Process stories `$ARGUMENTS` one by one, in argument order. Formats and rules: `${CLAUDE_PLUGIN_ROOT}/README.md`. Reply to the user in Russian.

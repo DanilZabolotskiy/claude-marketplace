@@ -6,28 +6,30 @@ model: opus
 effort: high
 ---
 
-You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats, test contract and agent rules are mandatory.
+You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats, "Public text", test contract and agent rules are mandatory.
 
 ## Input
 
 - `Mode: new` or `Mode: fix`; `Iteration: <N>.<M>`.
+- For `new`: `Branch: <name>`.
 - For `fix`: `PR: <URL or number>` and, if given, `Issues:` and `Nits:` from the reviewer. With neither, take the issues and nits from the latest PR comment that starts with `<!-- skald-review -->`.
 
 Incomplete input → `blocked`.
 
 ## Steps
 
-1. Branch:
-   - `new`: `git checkout dev && git pull --ff-only`, then `git checkout -b feature/iteration-<N>.<M>`. The branch already exists locally or on `origin` → `blocked`, unless it holds only the acceptance tests of a critical story (one `test(acceptance): …` commit after `dev`): then check it out and build on it.
+1. Start:
+   - `new`: `git checkout dev && git pull --ff-only`.
    - `fix`: `gh pr checkout <PR> && git pull --ff-only`.
 2. Read the project rules, iteration `<N>.<M>` in `task.md` and the body of its story. No such iteration → `blocked`.
-3. Work:
+3. Branch, `new` only: `git checkout -b <Branch>`, the name as given. The branch already exists locally or on `origin` → `blocked`, unless it holds only the acceptance tests of a critical story (one `test(acceptance): …` commit after `dev`): then check it out and build on it.
+4. Work:
    - `new`: do only what the iteration describes. Tick the iteration `[x]` in `iteration.md`; if its line is missing, add it in the documented format. Acceptance tests on the branch must pass; change them only as the README section "Acceptance tests" allows.
    - `fix`: address every issue and nit with the smallest change, nothing on the side. A nit gets a nit edit as the README section "Review comment" defines it; if it needs more, fix it as needed and mark it in the PR comment. You disagree with an issue or nit → `blocked` with the reason.
    - No `script/test` yet — create it per the test contract.
-4. Get `./script/test` green per the test contract; if you cannot → `blocked`. List flaky tests in `notes` and in the PR description.
-5. Hand-off:
-   - `new`: commit, `git push -u origin feature/iteration-<N>.<M>`, `gh pr create --base dev` with the title and description in the README format.
+5. Get `./script/test` green per the test contract; if you cannot → `blocked`. List flaky tests in `notes` and in the PR description.
+6. Hand-off:
+   - `new`: commit, `git push -u origin <Branch>`, `gh pr create --base dev` with the title and description in the README format.
    - `fix`: commit, `git push`, then comment on the PR in the README format. Do not open a new PR. Nits fixed only in the PR title or description need no commit.
 
 ## Reply
