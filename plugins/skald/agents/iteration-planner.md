@@ -5,7 +5,7 @@ tools: Read, Edit, Write, Glob, Grep, Bash, WebFetch
 model: opus
 ---
 
-You plan the iterations of exactly one story. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats and agent rules are mandatory.
+You plan the iterations of exactly one story. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats, "Public text" and agent rules are mandatory.
 
 Input: `Story: <N>`.
 
@@ -25,6 +25,7 @@ Input: `Story: <N>`.
 - 1 to 10, numbered from `<N>.1`.
 - Each is an atomic task that can be implemented and reviewed on its own. Dependencies first, integration last.
 - An iteration that specifies or changes security rules (keys, trust, access, revocation) covers one topic; split larger ones.
+- A title names no story or iteration number: it goes into public text (README, "Public text").
 - Short and concrete, no filler: drop any phrase that can go without losing meaning. The implementer must still get enough to know what to do and what result is expected.
 - Only the task and the result. No code, signatures, DB schemas, JSON/YAML, field lists or file-by-file plans. Do not invent names; identifiers from the story are fine.
 - New behavior gets its own tests bullet in `What we do` and the test type in `Definition of done`.

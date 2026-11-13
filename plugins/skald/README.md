@@ -63,13 +63,13 @@ Orchestration runs in the main session, inside the commands. Agents never call o
 Title — Conventional Commits, unless the project rules set another format: `<type>(<scope>): <summary>`.
 - `type`: `feat`, `fix`, `refactor`, `perf`, `test`, `docs`, `build`, `ci`, `chore`; a breaking change adds `!` before the colon.
 - `scope`: a module of the project; optional.
-- Summary: imperative, lowercase, up to 72 characters, about the result. No iteration number: it is in the description and the branch name.
-- Plan PR: `chore(plan): plan story <N>`.
+- Summary: imperative, lowercase, up to 72 characters, about the result.
+- Plan PR: `chore(plan): plan <story title, in a few words>`.
 
 Description:
 
 ```markdown
-Iteration <N>.<M> — <iteration title> (story <N>)
+Iteration: <iteration title> (story: <story title>)
 
 ## Changes
 - <1–5 bullets on behavior, not on files>
@@ -95,7 +95,7 @@ Changes requested:
 
 ```markdown
 <!-- skald-review -->
-## ❌ Changes requested — iteration <N>.<M>, review <k>/4
+## ❌ Changes requested — <iteration title>, review <k>/4
 
 1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what to do>.
 
@@ -114,7 +114,7 @@ Approved:
 
 ```markdown
 <!-- skald-review -->
-## ✅ Approved — iteration <N>.<M>, review <k>/4
+## ✅ Approved — <iteration title>, review <k>/4
 
 - Iteration: all of "What we do" and "Definition of done" are done.
 - Tests: <new tests, briefly> · `script/test` ✅ · CI ✅|none
@@ -147,16 +147,24 @@ N1. **<Category>** `<path:line>`[, `<path:line>` …] — <problem>. → <what t
 
 For each iteration of a critical story, before any code:
 - `acceptance-tester` writes tests of every item of the iteration's `Definition of done` and of the behavior the specs fix for it. Black box: only through interfaces a user or another component sees (API, CLI, protocol, a module's public API). Names come from the specs; a missing name the tester chooses and lists in the commit body.
-- It commits only the tests as `test(acceptance): iteration <N>.<M>` on `feature/iteration-<N>.<M>` and pushes without a PR. The new tests fail because the code is missing; everything else stays green.
+- It commits only the tests as `test(acceptance): <what the iteration does, in a few words>` on the iteration branch and pushes without a PR. The new tests fail because the code is missing; everything else stays green.
 - An iteration with nothing to test, such as docs only → `skipped`, and it runs as usual.
 - The developer builds on that branch. It changes an acceptance test only to fix a defect in the test, and lists each change with its reason under `Decisions` in the PR.
 - The reviewer checks every change to those tests (`git diff <acceptance commit> HEAD -- <its files>`). A change that is unlisted or weakens a check is a `Tests` issue.
+
+## Public text
+
+- Commit messages, branch names, PR titles, descriptions and comments name no story or iteration number. Only the orchestrator's reports to the user may.
+- An iteration or a story is named by its title.
+- Iteration branch: `feature/<slug>` of the iteration title in its `task.md` heading. Plan branch: `plan/<slug>` of the story title in its `task.md` heading.
+- `<slug>`: the title in lower case, apostrophes dropped, every run of characters other than ASCII letters and digits replaced by one `-`, no `-` at either end. Over 50 characters → cut after the last whole word that fits in 50; a first word over 50 is cut at 50.
+- Every step that names a branch derives it this way.
 
 ## Agent rules
 
 - Before starting, read the project rules: `AGENTS.md`, `CLAUDE.md`, `rules.md` in the root, whichever exist. Style, tests and the format of commits and PR titles follow them.
 - Everything written to the repository or GitHub is English: iterations, `iteration.md`, code, commits, PRs, review comments. Only chat replies are Russian.
-- The base branch is `dev`; the iteration branch is `feature/iteration-<N>.<M>`.
+- The base branch is `dev`; branch names are in "Public text".
 - Changes reach `dev` only through a PR merged by the orchestrator. Never commit or push to `dev` directly.
 - `gh pr comment` runs with `dangerouslyDisableSandbox: true`: the sandbox silently drops this write.
 - A dirty working tree or a git error means stop. No `stash`, `reset`, force-push, or bypassing hooks or signing (`--no-verify`).

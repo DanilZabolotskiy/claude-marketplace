@@ -8,7 +8,7 @@ Run the cycle for iteration `$ARGUMENTS` yourself, in the main session. Formats 
 
 Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. Iteration already ticked `[x]` in `iteration.md` → say it is done and stop.
 
-0. **Acceptance tests.** Only for a critical story (its body has `- **Acceptance tests:** first`), and only if `origin` has no `feature/iteration-<N.M>` yet. Run agent `skald:acceptance-tester` with the prompt `Iteration: <N.M>`. `status` is `ok` or `skipped` → step 1; otherwise stop.
+0. **Acceptance tests.** Only for a critical story (its body has `- **Acceptance tests:** first`), and only if `origin` has no `feature/<slug>` (README, "Public text") yet. Run agent `skald:acceptance-tester` with the prompt `Iteration: <N.M>`. `status` is `ok` or `skipped` → step 1; otherwise stop.
 1. **Develop.** Run agent `skald:developer` with the prompt:
    ```
    Mode: new
@@ -40,7 +40,7 @@ Argument not of the form `<N>.<M>` → show usage `/skald:dev <N.M>` and stop. I
    Nits:
    <nits from the latest VERDICT, verbatim>
    ```
-   `status` is not `ok` → stop. Then `git fetch` and compare with the noted state: `git diff <noted head> origin/feature/iteration-<N.M>`, and the PR title and description.
+   `status` is not `ok` → stop. Then `git fetch` and compare with the noted state: `git diff <noted head> origin/feature/<slug>`, and the PR title and description.
    - Every change is a nit edit (README, "Review comment") in a file, the title or the description that the nits cite: no new commits, or the noted head had no CI checks → step 5. Otherwise wait for the new head's checks (`gh pr checks <pr> --watch`); none appear within 10 minutes, or all green → step 5; a red check → as below.
    - Anything else is a fix round. 3 fix rounds were done before it → stop and name the unreviewed changes in the Summary: commits, title, description; otherwise step 2.
 5. **Merge.** `gh pr merge <pr> --squash --delete-branch` without `--admin`, then `git checkout dev && git pull --ff-only`. Error → stop.

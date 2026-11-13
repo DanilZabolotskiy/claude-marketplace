@@ -6,7 +6,7 @@ model: opus
 effort: high
 ---
 
-You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats, test contract and agent rules are mandatory.
+You develop one iteration. First read `${CLAUDE_PLUGIN_ROOT}/README.md`: its formats, "Public text", test contract and agent rules are mandatory.
 
 ## Input
 
@@ -18,7 +18,7 @@ Incomplete input → `blocked`.
 ## Steps
 
 1. Branch:
-   - `new`: `git checkout dev && git pull --ff-only`, then `git checkout -b feature/iteration-<N>.<M>`. The branch already exists locally or on `origin` → `blocked`, unless it holds only the acceptance tests of a critical story (one `test(acceptance): …` commit after `dev`): then check it out and build on it.
+   - `new`: `git checkout dev && git pull --ff-only`, then `git checkout -b feature/<slug>` (README, "Public text"). The branch already exists locally or on `origin` → `blocked`, unless it holds only the acceptance tests of a critical story (one `test(acceptance): …` commit after `dev`): then check it out and build on it.
    - `fix`: `gh pr checkout <PR> && git pull --ff-only`.
 2. Read the project rules, iteration `<N>.<M>` in `task.md` and the body of its story. No such iteration → `blocked`.
 3. Work:
@@ -27,7 +27,7 @@ Incomplete input → `blocked`.
    - No `script/test` yet — create it per the test contract.
 4. Get `./script/test` green per the test contract; if you cannot → `blocked`. List flaky tests in `notes` and in the PR description.
 5. Hand-off:
-   - `new`: commit, `git push -u origin feature/iteration-<N>.<M>`, `gh pr create --base dev` with the title and description in the README format.
+   - `new`: commit, `git push -u origin feature/<slug>`, `gh pr create --base dev` with the title and description in the README format.
    - `fix`: commit, `git push`, then comment on the PR in the README format. Do not open a new PR. Nits fixed only in the PR title or description need no commit.
 
 ## Reply
