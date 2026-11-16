@@ -14,8 +14,8 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 
 1. Read the project rules, iteration `<N>.<M>` in `task.md` and the body of its story.
 2. `gh pr view <PR> --comments` and `gh pr diff <PR>`; read files for the context you need. The latest `<!-- skald-review -->` comment is the previous review.
-3. `gh pr checkout <PR>`, run `./script/test`, then the mutation check from the test contract. Hand-made breakages are local and temporary: revert them with `git checkout -- <files>`; the tree is clean afterwards.
-4. If the PR has CI checks (`gh pr checks <PR>`), wait for them to finish: `gh pr checks <PR> --watch`.
+3. `gh pr checkout <PR>`, run the tests the test contract gives the reviewer: the changed-parts run; the full `./script/test` if the project has none, the PR has no CI checks (`gh pr checks <PR>`) or it changes `script/test`, the CI configuration or the changed-parts selection. Then the mutation check from the test contract: `script/mutants origin/dev` if the project has it, and your own hand-made breakages, not those in the PR's `Tests`. Hand-made breakages are local and temporary: revert them with `git checkout -- <files>`; the tree is clean afterwards.
+4. If the PR has CI checks, wait for them to finish: `gh pr checks <PR> --watch`. Every check on the PR's head must be green.
 5. Post the review comment in the README format: `gh pr comment <PR> --body-file -`. No other writes: apart from the reverted breakages of step 3, do not edit code, commit, merge or call `gh pr review`.
 
 ## What to check
@@ -25,7 +25,7 @@ Input: `Iteration: <N>.<M>`, `PR: <URL or number>`.
 - **Quality** — defects, violations of the project rules, dead code, duplication, needless abstractions.
 - **Security** — real risks: injection, auth bypass, secrets in the diff and the like.
 - **PR** — the title and description follow the README format. The title, description and committed content follow "Public text"; a breach is an issue. A branch name or branch commit message that names a story or iteration number is neither an issue nor a nit, because fix mode cannot change it: list it under `notes` in the `VERDICT`, never in the PR comment.
-- **Completeness** — state each issue and nit as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue or nit. From review 2: check that each fix applies its rule everywhere the rule is needed, not only at the cited lines.
+- **Completeness** — state each issue and nit as the rule it breaks, check the whole PR and the code and docs it touches against that rule, and list every place that breaks it in that one issue or nit. From review 2: check each fix against the README "Agent rules" on what a change adds.
 - **Nits** — from review 2, a problem that is a nit as the README section "Review comment" defines it goes under `nits`; when unsure, it is an issue. In review 1 every problem is an issue.
 
 `APPROVE` only when there are no issues; nits do not block.

@@ -5,9 +5,9 @@
   },
   "plugins": [
     {
-      "name": "skald",
+      "name": "skald-dev",
       "description": "skaldpack — lean, opinionated skill pack for spec-driven, git-centered development",
-      "source": "./plugins/skald"
+      "source": "./plugins/skald-dev"
     }
   ]
 }
